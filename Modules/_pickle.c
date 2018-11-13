@@ -4023,9 +4023,11 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
         goto done;
     }
     else if (type == &PyFunction_Type) {
+        /* modify this */
         status = save_global(self, obj, NULL);
         goto done;
     }
+    /* add other methods like save_*/
 
     /* XXX: This part needs some unit tests. */
 
