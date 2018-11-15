@@ -1,0 +1,8 @@
+python
+import gdb
+import sys
+import os
+def setup_python(event):
+    import libpython
+gdb.events.new_objfile.connect(setup_python)
+end

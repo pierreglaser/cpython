@@ -1720,8 +1720,10 @@ getattribute(PyObject *obj, PyObject *name, int allow_qualname)
         (void)_PyObject_LookupAttr(obj, name, &attr);
     }
     if (attr == NULL && !PyErr_Occurred()) {
+        /* PyErr_Format(PyExc_AttributeError, */
+        /*              "Can't get attribute %R on %R", name, obj); */
         PyErr_Format(PyExc_AttributeError,
-                     "Can't get attribute %R on %R", name, obj);
+                     "this is me! yay", name, obj);
     }
     return attr;
 }
@@ -3291,6 +3293,20 @@ fix_imports(PyObject **module_name, PyObject **global_name)
     return 0;
 }
 
+static PyObject *
+extract_func_data(PyObject *obj){
+}
+
+static int
+save_function_tuple(PicklerObject *self, PyObject *obj){
+/* Given a module object, get its per-module state. */
+    PickleState *st = _Pickle_GetGlobalState();
+    PyErr_Format(st->PicklingError,
+                 "your trying to use save_function_tuple on %R bro",
+                 obj);
+    return 0;
+}
+
 static int
 save_global(PicklerObject *self, PyObject *obj, PyObject *name)
 {
@@ -3301,6 +3317,7 @@ save_global(PicklerObject *self, PyObject *obj, PyObject *name)
     PyObject *dotted_path = NULL;
     PyObject *lastname = NULL;
     PyObject *cls;
+    PyObject *reduce_func = NULL;
     PickleState *st = _Pickle_GetGlobalState();
     int status = 0;
     _Py_IDENTIFIER(__name__);
@@ -3338,6 +3355,37 @@ save_global(PicklerObject *self, PyObject *obj, PyObject *name)
        feature). The import C API would need to be extended to support the
        extra parameters of __import__ to fix that. */
     module = PyImport_Import(module_name);
+    if (_PyUnicode_EqualToASCIIString(module_name, "__main__")) {
+        if (!PyObject_HasAttrString(obj, "__code__")){
+            /* reduce_func = _PyObject_GetAttrId(obj, &PyId___reduce__); */
+            /* if (reduce_func != NULL) { */
+            /*     reduce_value = _PyObject_CallNoArg(reduce_func); */
+            /* } */
+            _Py_IDENTIFIER(__reduce_ex__);
+            if (_PyObject_LookupAttrId(obj, &PyId___reduce_ex__, &reduce_func) < 0) {
+                PyErr_SetString(st->PicklingError,
+                                "no reduce_ex?");
+                goto error;
+            }
+            if (reduce_func != NULL) {
+                PyErr_SetString(st->PicklingError,
+                                "some reduce_ex!");
+                PyObject *proto;
+                proto = PyLong_FromLong(self->proto);
+                if (proto != NULL) {
+                    PyObject *reduce_value = _Pickle_FastCall(reduce_func, proto);
+                    PyErr_SetString(st->PicklingError,
+                                    "some reduce_ex and some proto!");
+                    goto error;
+                }
+            }
+        }
+        else {
+            save_function_tuple(self, obj);
+            goto error;
+        }
+    }
+
     if (module == NULL) {
         PyErr_Format(st->PicklingError,
                      "Can't pickle %R: import of module %R failed",
