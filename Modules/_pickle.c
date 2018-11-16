@@ -4272,7 +4272,7 @@ _pickle_Pickler_dump(PicklerObject *self, PyObject *obj)
 }
 
 static int fill_globals(PyObject *co, PyObject **val){
-    PyObject *co_code, *co_names;
+    PyObject *co_code, *co_names, *co_consts;
     PyObject *op, *seq;
     PyObject *global_var_names;
 
@@ -4283,8 +4283,11 @@ static int fill_globals(PyObject *co, PyObject **val){
 
     co_code = ((PyCodeObject *)co)->co_code;
     co_names = ((PyCodeObject *)co)->co_names;
+    co_consts = ((PyCodeObject *)co)->co_consts;
+
     Py_INCREF(co_code);
     Py_INCREF(co_names);
+    Py_INCREF(co_consts);
 
     seq = PySequence_Fast(co_code, "expected a sequence");
     len = PySequence_Size(co_code);
@@ -4314,6 +4317,24 @@ static int fill_globals(PyObject *co, PyObject **val){
             }
         }
         i+=2;
+    }
+    if (co_consts != Py_None){
+        PyObject *const_seq = PySequence_Fast(
+                co_consts, "expected a sequence");
+        Py_ssize_t consts_len = PySequence_Size(co_consts);
+        int j = 0;
+        PyObject *next_const;
+        while (j < consts_len){
+            next_const = PySequence_Fast_GET_ITEM(const_seq, j);
+            if (Py_TYPE(next_const) == &PyCode_Type){
+            /* TODO: this will not work, i need to append to the current
+             * val and not override. I need to write a test to
+             * make sure that works. */
+                fill_globals(next_const, val);
+            }
+            j++;
+
+        }
     }
 
     *val = global_var_names;
