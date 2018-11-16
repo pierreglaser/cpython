@@ -34,6 +34,24 @@ PyDoc_STRVAR(_pickle_Pickler_dump__doc__,
 #define _PICKLE_PICKLER_DUMP_METHODDEF    \
     {"dump", (PyCFunction)_pickle_Pickler_dump, METH_O, _pickle_Pickler_dump__doc__},
 
+PyDoc_STRVAR(_pickle_Pickler_extract_func_data__doc__,
+"extract_func_data($self, obj, /)\n"
+"--\n"
+"\n"
+"Turn the function into (code, globals, defaults, closure_values, dict)");
+
+#define _PICKLE_PICKLER_EXTRACT_FUNC_DATA_METHODDEF    \
+    {"extract_func_data", (PyCFunction)_pickle_Pickler_extract_func_data, METH_O, _pickle_Pickler_extract_func_data__doc__},
+
+PyDoc_STRVAR(_pickle_Pickler_extract_code_globals__doc__,
+"extract_code_globals($self, obj, /)\n"
+"--\n"
+"\n"
+"Find all globals names read or written to by codeblock co");
+
+#define _PICKLE_PICKLER_EXTRACT_CODE_GLOBALS_METHODDEF    \
+    {"extract_code_globals", (PyCFunction)_pickle_Pickler_extract_code_globals, METH_O, _pickle_Pickler_extract_code_globals__doc__},
+
 PyDoc_STRVAR(_pickle_Pickler___sizeof____doc__,
 "__sizeof__($self, /)\n"
 "--\n"
@@ -458,6 +476,52 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(_pickle_save_function_tuple__doc__,
+"save_function_tuple($module, /, obj, protocol=None, *, fix_imports=True)\n"
+"--\n"
+"\n"
+"Save a dynamic function as a tuple\n"
+"\n"
+"The optional *protocol* argument tells the pickler to use the given\n"
+"protocol; supported protocols are 0, 1, 2, 3 and 4.  The default\n"
+"protocol is 4. It was introduced in Python 3.4, it is incompatible\n"
+"with previous versions.\n"
+"\n"
+"Specifying a negative protocol version selects the highest protocol\n"
+"version supported.  The higher the protocol used, the more recent the\n"
+"version of Python needed to read the pickle produced.\n"
+"\n"
+"If *fix_imports* is True and *protocol* is less than 3, pickle will\n"
+"try to map the new Python 3 names to the old module names used in\n"
+"Python 2, so that the pickle data stream is readable with Python 2.");
+
+#define _PICKLE_SAVE_FUNCTION_TUPLE_METHODDEF    \
+    {"save_function_tuple", (PyCFunction)_pickle_save_function_tuple, METH_FASTCALL|METH_KEYWORDS, _pickle_save_function_tuple__doc__},
+
+static PyObject *
+_pickle_save_function_tuple_impl(PyObject *module, PyObject *obj,
+                                 PyObject *protocol, int fix_imports);
+
+static PyObject *
+_pickle_save_function_tuple(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    PyObject *return_value = NULL;
+    static const char * const _keywords[] = {"obj", "protocol", "fix_imports", NULL};
+    static _PyArg_Parser _parser = {"O|O$p:save_function_tuple", _keywords, 0};
+    PyObject *obj;
+    PyObject *protocol = NULL;
+    int fix_imports = 1;
+
+    if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser,
+        &obj, &protocol, &fix_imports)) {
+        goto exit;
+    }
+    return_value = _pickle_save_function_tuple_impl(module, obj, protocol, fix_imports);
+
+exit:
+    return return_value;
+}
+
 PyDoc_STRVAR(_pickle_load__doc__,
 "load($module, /, file, *, fix_imports=True, encoding=\'ASCII\',\n"
 "     errors=\'strict\')\n"
@@ -562,4 +626,4 @@ _pickle_loads(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=6fc104b8299c82dd input=a9049054013a1b77]*/
+/*[clinic end generated code: output=84be732c96d7562c input=a9049054013a1b77]*/

@@ -7,6 +7,7 @@
 
 #include "Python.h"
 #include "structmember.h"
+#include "opcode.h"
 
 PyDoc_STRVAR(pickle_module_doc,
 "Optimized C implementation for the Python pickle module.");
@@ -3293,19 +3294,19 @@ fix_imports(PyObject **module_name, PyObject **global_name)
     return 0;
 }
 
-static PyObject *
-extract_func_data(PyObject *obj){
-}
+/* static PyObject * */
+/* extract_func_data(PyObject *obj){ */
+/* } */
 
-static int
-save_function_tuple(PicklerObject *self, PyObject *obj){
-/* Given a module object, get its per-module state. */
-    PickleState *st = _Pickle_GetGlobalState();
-    PyErr_Format(st->PicklingError,
-                 "your trying to use save_function_tuple on %R bro",
-                 obj);
-    return 0;
-}
+/* static int */
+/* save_function_tuple(PicklerObject *self, PyObject *obj){ */
+/* /1* Given a module object, get its per-module state. *1/ */
+/*     PickleState *st = _Pickle_GetGlobalState(); */
+/*     PyErr_Format(st->PicklingError, */
+/*                  "your trying to use save_function_tuple on %R bro", */
+/*                  obj); */
+/*     return 0; */
+/* } */
 
 static int
 save_global(PicklerObject *self, PyObject *obj, PyObject *name)
@@ -3381,7 +3382,7 @@ save_global(PicklerObject *self, PyObject *obj, PyObject *name)
             }
         }
         else {
-            save_function_tuple(self, obj);
+            /* save_function_tuple(self, obj); */
             goto error;
         }
     }
@@ -4270,6 +4271,103 @@ _pickle_Pickler_dump(PicklerObject *self, PyObject *obj)
     Py_RETURN_NONE;
 }
 
+static int fill_globals(PyObject *co, PyObject **val){
+    PyObject *co_code, *co_names;
+    PyObject *op, *seq;
+    PyObject *global_var_names;
+
+    global_var_names = PyList_New(0);
+    Py_ssize_t oparg;
+    int i, len, first_arg_byte;
+    int extended_arg = 0;
+
+    co_code = ((PyCodeObject *)co)->co_code;
+    co_names = ((PyCodeObject *)co)->co_names;
+    Py_INCREF(co_code);
+    Py_INCREF(co_names);
+
+    seq = PySequence_Fast(co_code, "expected a sequence");
+    len = PySequence_Size(co_code);
+
+    i = 0;
+    while(i < len){
+        op = PySequence_Fast_GET_ITEM(seq, i);
+        if (HAS_ARG(PyLong_AS_LONG(op))){
+            first_arg_byte = PyLong_AS_LONG(PySequence_Fast_GET_ITEM(seq, i+1));
+
+
+            extended_arg = 0;
+            oparg = first_arg_byte | extended_arg;
+
+            if (PyLong_AS_LONG(op) == EXTENDED_ARG){
+                extended_arg = oparg << 8;
+            }
+            if (PyLong_AS_LONG(op) == STORE_GLOBAL || 
+                PyLong_AS_LONG(op) == DELETE_GLOBAL || 
+                PyLong_AS_LONG(op) == LOAD_GLOBAL){
+
+
+                PyObject *name = PyTuple_GetItem(co_names, oparg);
+                PyList_Append(global_var_names, 
+                              name);
+                /* Py_INCREF(global_var_names); */
+            }
+        }
+        i+=2;
+    }
+
+    *val = global_var_names;
+    return 1;
+}
+/*[clinic input]
+
+_pickle.Pickler.extract_func_data
+
+  obj: object
+  /
+
+Turn the function into (code, globals, defaults, closure_values, dict)
+[clinic start generated code]*/
+
+static PyObject *
+_pickle_Pickler_extract_func_data(PicklerObject *self, PyObject *obj)
+/*[clinic end generated code: output=ee412751339127fc input=cc4ff557837c1156]*/
+{
+    PyObject *co;
+
+    _Py_IDENTIFIER(__code__);
+    if (_PyObject_LookupAttrId((PyObject *)obj, &PyId___code__, &co) < 0) {
+        /* PyErr_SetString(st->PicklingError, */
+        /*                 "no code?"); */
+        return NULL;
+    }
+
+    /* add attribute error handling for PyPy builtin-code object? */
+
+    PyObject *globals;
+    fill_globals(co, &globals);
+    return globals;
+
+}
+
+/*[clinic input]
+
+_pickle.Pickler.extract_code_globals
+
+  obj: object
+  /
+
+Find all globals names read or written to by codeblock co
+[clinic start generated code]*/
+
+static PyObject *
+_pickle_Pickler_extract_code_globals(PicklerObject *self, PyObject *obj)
+/*[clinic end generated code: output=848b6695750baa1c input=a64121f287838919]*/
+{ 
+    Py_INCREF(self);
+    return (PyObject *)self;
+}
+
 /*[clinic input]
 
 _pickle.Pickler.__sizeof__ -> Py_ssize_t
@@ -4299,6 +4397,8 @@ _pickle_Pickler___sizeof___impl(PicklerObject *self)
 
 static struct PyMethodDef Pickler_methods[] = {
     _PICKLE_PICKLER_DUMP_METHODDEF
+    _PICKLE_PICKLER_EXTRACT_FUNC_DATA_METHODDEF
+    _PICKLE_PICKLER_EXTRACT_CODE_GLOBALS_METHODDEF
     _PICKLE_PICKLER_CLEAR_MEMO_METHODDEF
     _PICKLE_PICKLER___SIZEOF___METHODDEF
     {NULL, NULL}                /* sentinel */
@@ -7318,6 +7418,40 @@ _pickle_dumps_impl(PyObject *module, PyObject *obj, PyObject *protocol,
 
 /*[clinic input]
 
+_pickle.save_function_tuple
+
+  obj: object
+  protocol: object = NULL
+  *
+  fix_imports: bool = True
+
+Save a dynamic function as a tuple
+
+The optional *protocol* argument tells the pickler to use the given
+protocol; supported protocols are 0, 1, 2, 3 and 4.  The default
+protocol is 4. It was introduced in Python 3.4, it is incompatible
+with previous versions.
+
+Specifying a negative protocol version selects the highest protocol
+version supported.  The higher the protocol used, the more recent the
+version of Python needed to read the pickle produced.
+
+If *fix_imports* is True and *protocol* is less than 3, pickle will
+try to map the new Python 3 names to the old module names used in
+Python 2, so that the pickle data stream is readable with Python 2.
+[clinic start generated code]*/
+
+static PyObject *
+_pickle_save_function_tuple_impl(PyObject *module, PyObject *obj,
+                                 PyObject *protocol, int fix_imports)
+/*[clinic end generated code: output=9120670cc6d004d5 input=14e78d79c5e9163c]*/
+{
+    PicklerObject *pickler = _Pickler_New();
+    return (PyObject *)pickler;
+}
+
+/*[clinic input]
+
 _pickle.load
 
   file: object
@@ -7438,6 +7572,7 @@ static struct PyMethodDef pickle_methods[] = {
     _PICKLE_DUMPS_METHODDEF
     _PICKLE_LOAD_METHODDEF
     _PICKLE_LOADS_METHODDEF
+    _PICKLE_SAVE_FUNCTION_TUPLE_METHODDEF
     {NULL, NULL} /* sentinel */
 };
 
