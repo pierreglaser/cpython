@@ -3374,7 +3374,7 @@ save_global(PicklerObject *self, PyObject *obj, PyObject *name)
                 PyObject *proto;
                 proto = PyLong_FromLong(self->proto);
                 if (proto != NULL) {
-                    PyObject *reduce_value = _Pickle_FastCall(reduce_func, proto);
+                    /* PyObject *reduce_value = _Pickle_FastCall(reduce_func, proto); */
                     PyErr_SetString(st->PicklingError,
                                     "some reduce_ex and some proto!");
                     goto error;
@@ -4311,7 +4311,7 @@ static int fill_globals(PyObject *co, PyObject **val){
 
 
                 PyObject *name = PyTuple_GetItem(co_names, oparg);
-                PyList_Append(global_var_names, 
+                PyList_Append(global_var_names,
                               name);
                 /* Py_INCREF(global_var_names); */
             }
@@ -4330,7 +4330,10 @@ static int fill_globals(PyObject *co, PyObject **val){
             /* TODO: this will not work, i need to append to the current
              * val and not override. I need to write a test to
              * make sure that works. */
-                fill_globals(next_const, val);
+                PyObject *globals_from_nested_funcs = PyList_New(0);
+                fill_globals(next_const, &globals_from_nested_funcs);
+                _PyList_Extend((PyListObject *)global_var_names, 
+                               globals_from_nested_funcs);
             }
             j++;
 
