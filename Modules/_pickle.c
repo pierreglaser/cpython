@@ -699,6 +699,7 @@ static int save(PicklerObject *, PyObject *, int);
 static int save_reduce(PicklerObject *, PyObject *, PyObject *);
 static PyTypeObject Pickler_Type;
 static PyTypeObject Unpickler_Type;
+static PyTypeObject _empty_cell_value_Type;
 
 #include "clinic/_pickle.c.h"
 
@@ -4343,6 +4344,34 @@ static int fill_globals(PyObject *co, PyObject **val){
     *val = global_var_names;
     return 1;
 }
+
+static int process_closure(PyObject *co, PyObject **val){
+    if (co == Py_None){
+        *val = Py_None;
+        Py_INCREF(Py_None);
+    }
+    else{
+        PyObject *item;
+        PyObject *iterator = PyObject_GetIter(co);
+        PyObject *cells_content_list = PyList_New(0);
+        PyObject *cell_content = NULL;
+        while (item=PyIter_Next(iterator)){
+            _Py_IDENTIFIER(cell_contents);
+            if (_PyObject_LookupAttrId((PyObject *)item,
+                        &PyId_cell_contents, &cell_content) < 0) {
+		PyObject *new_empty_cell_value;
+		new_empty_cell_value = PyType_GenericNew(&_empty_cell_value_Type, NULL, NULL);
+                PyList_Append(cells_content_list, new_empty_cell_value);
+
+            }
+            else{
+                Py_INCREF(Py_None);
+                PyList_Append(cells_content_list, Py_None);
+            }
+        }
+    }
+    return 1;
+}
 /*[clinic input]
 
 _pickle.Pickler.extract_func_data
@@ -4358,6 +4387,7 @@ _pickle_Pickler_extract_func_data(PicklerObject *self, PyObject *obj)
 /*[clinic end generated code: output=ee412751339127fc input=cc4ff557837c1156]*/
 {
     PyObject *co;
+    PickleState *st = _Pickle_GetGlobalState();
 
     _Py_IDENTIFIER(__code__);
     if (_PyObject_LookupAttrId((PyObject *)obj, &PyId___code__, &co) < 0) {
@@ -4366,12 +4396,68 @@ _pickle_Pickler_extract_func_data(PicklerObject *self, PyObject *obj)
         return NULL;
     }
 
+
     /* add attribute error handling for PyPy builtin-code object? */
 
-    PyObject *globals;
-    fill_globals(co, &globals);
-    return globals;
+    PyObject *global_names, *globals;
+    PyObject *f_globals = PyDict_New();
 
+    fill_globals(co, &global_names);
+    globals = PyFunction_GetGlobals(obj);
+    PyObject *iterator = PyObject_GetIter(global_names);
+    PyObject *item;
+
+    while (item = PyIter_Next(iterator)) {
+        PyDict_SetItem(f_globals, item, PyDict_GetItem(globals, item));
+        Py_DECREF(item);
+    }
+
+    if (PyErr_Occurred()) {
+        return NULL;
+    }
+
+    /* process closure */
+    _Py_IDENTIFIER(__closure__);
+    PyObject *closure = NULL, *processed_closure = NULL;
+    if (_PyObject_LookupAttrId((PyObject *)obj,
+                               &PyId___closure__, &closure) < 0) {
+        PyErr_SetString(st->PicklingError, "no __closure__ attribute");
+        return NULL;
+    }
+    process_closure(closure, &processed_closure);
+
+    PyObject *f_dict = NULL;
+    _Py_IDENTIFIER(__dict__);
+    if (_PyObject_LookupAttrId((PyObject *)obj,
+                               &PyId___dict__, &f_dict) < 0) {
+        PyErr_SetString(st->PicklingError, "no __dict__ attribute");
+        return NULL;
+    }
+
+    _Py_IDENTIFIER(__module__);
+    PyObject *f_module = NULL;
+    if ((_PyObject_LookupAttrId((PyObject *)obj,
+                    &PyId___module__, &f_module) < 0) ||
+        (f_module == Py_None)) {
+        f_module = PyDict_New();
+        }
+
+    PyObject *f_defaults = NULL;
+    _Py_IDENTIFIER(__defaults__);
+    if (_PyObject_LookupAttrId((PyObject *)obj,
+                               &PyId___defaults__, &f_defaults) > 0) {
+	if (f_module == Py_None){
+	    f_module = PyDict_New();
+	}
+    }
+    PyObject *state = PyTuple_New(6);
+    PyTuple_SET_ITEM(state, 0, co);
+    PyTuple_SET_ITEM(state, 1, f_globals);
+    PyTuple_SET_ITEM(state, 2, f_defaults);
+    PyTuple_SET_ITEM(state, 3, processed_closure);
+    PyTuple_SET_ITEM(state, 4, f_dict);
+    PyTuple_SET_ITEM(state, 5, f_module);
+    return state;
 }
 
 /*[clinic input]
@@ -7645,6 +7731,38 @@ static struct PyModuleDef _picklemodule = {
     (freefunc)pickle_free /* m_free */
 };
 
+static PyObject * _empty_cell_value___reduce__(PyObject *self){
+    PyObject *res = PyUnicode_FromString(self->ob_type->tp_name);
+    return res;
+}
+
+PyDoc_STRVAR(_pickle_empty_cell_value___reduce____doc__,
+"__reduce__($self, /)\n"
+"--\n"
+"\n"
+"Implement pickle support.");
+
+static PyMethodDef _empty_cell_value_methods[] = {
+    {"__reduce__", (PyCFunction)_empty_cell_value___reduce__, METH_NOARGS, _pickle_empty_cell_value___reduce____doc__},
+    {NULL, NULL} /* sentinel */
+};
+
+typedef struct {
+    PyObject_HEAD
+    /* Type-specific fields go here. */
+} _empty_cell_value;
+
+static PyTypeObject _empty_cell_value_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "custom.Custom",
+    .tp_doc = "Custom objects",
+    .tp_basicsize = sizeof(_empty_cell_value),
+    .tp_itemsize = 0,
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_new = PyType_GenericNew,
+    .tp_methods = _empty_cell_value_methods
+};
+
 PyMODINIT_FUNC
 PyInit__pickle(void)
 {
@@ -7667,6 +7785,8 @@ PyInit__pickle(void)
         return NULL;
     if (PyType_Ready(&UnpicklerMemoProxyType) < 0)
         return NULL;
+    if (PyType_Ready(&_empty_cell_value_Type) < 0)
+        return NULL;
 
     /* Create the module and add the functions. */
     m = PyModule_Create(&_picklemodule);
@@ -7679,6 +7799,10 @@ PyInit__pickle(void)
     Py_INCREF(&Unpickler_Type);
     if (PyModule_AddObject(m, "Unpickler", (PyObject *)&Unpickler_Type) < 0)
         return NULL;
+
+    Py_INCREF(&_empty_cell_value_Type);
+    if (PyModule_AddObject(m, "_empty_cell_value", (PyObject *) &_empty_cell_value_Type) < 0)
+	return NULL;
 
     st = _Pickle_GetState(m);
 

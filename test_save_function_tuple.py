@@ -23,22 +23,19 @@ class CloudPickleTest(unittest.TestCase):
     def setUp(self):
         fileobj = BytesIO()
         self.pickler = pickle.Pickler(fileobj)
+        self.cloudpickler = cloudpickle.CloudPickler(fileobj)
 
     def test_walk_global_ops(self):
-        cloudpickle_global_ops = list(
-                cloudpickle.CloudPickler.extract_code_globals(
-                    f.__code__))
+        cloudpickle_global_ops = self.cloudpickler.extract_func_data(f)
         pickle_global_op = self.pickler.extract_func_data(f)
         assert cloudpickle_global_ops == pickle_global_op, pickle_global_op
 
     def test_walk_global_ops_with_nested_func(self):
-        cloudpickle_global_ops = list(
-                cloudpickle.CloudPickler.extract_code_globals(
-                    function_with_nested_func.__code__))
+        cloudpickle_global_ops = self.cloudpickler.extract_func_data(
+                    function_with_nested_func)
         pickle_global_op = self.pickler.extract_func_data(
-                function_with_nested_func)
-        self.assertCountEqual(cloudpickle_global_ops,
-                              pickle_global_op)
+                    function_with_nested_func)
+        assert cloudpickle_global_ops == pickle_global_op
 
 
 if __name__ == "__main__":
