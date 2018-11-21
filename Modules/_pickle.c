@@ -7712,21 +7712,24 @@ _pickle_save_function_tuple_impl(PyObject *module, PyObject *obj,
     f_dict = PyTuple_GET_ITEM(state_tuple, 4);
     f_module = PyTuple_GET_ITEM(state_tuple, 5);
 
-    PyDict_SetItem(state, PyUnicode_FromString("code"), co);
-    PyDict_SetItem(state, PyUnicode_FromString("globals"), f_globals);
-    PyDict_SetItem(state, PyUnicode_FromString("dict"), f_defaults);
-    PyDict_SetItem(state, PyUnicode_FromString("closure_values"),
-                   processed_closure);
-    PyDict_SetItem(state, PyUnicode_FromString("dict"), f_dict);
-    PyDict_SetItem(state, PyUnicode_FromString("module"), f_module);
-    PyDict_SetItem(state, PyUnicode_FromString("name"),
-                   PyObject_GetAttrString(obj, "__name__"));
-    PyDict_SetItem(state, PyUnicode_FromString("doc"),
-                   PyObject_GetAttrString(obj, "__doc__"));
-    PyDict_SetItem(state, PyUnicode_FromString("override_existing_globals"),
-                   PyBool_FromLong(0));
-    Py_INCREF(state);
+    PyDict_SetItemString(state, "code", co);
+    PyDict_SetItemString(state, "globals", f_globals);
+    PyDict_SetItemString(state, "defaults", f_defaults);
+    PyDict_SetItemString(state, "closure_values", processed_closure);
+    PyDict_SetItemString(state, "dict", f_dict);
+    PyDict_SetItemString(state, "base_globals", f_module);
+    PyDict_SetItemString(state, "name",
+                        ((PyFunctionObject *)obj) -> func_name);
+    PyDict_SetItemString(state, "doc",
+                        ((PyFunctionObject *)obj) -> func_doc);
+    PyDict_SetItemString(state, "module", PyFunction_GET_MODULE(obj));
 
+
+    Py_INCREF(((PyFunctionObject *)obj) -> func_doc);
+    Py_INCREF(((PyFunctionObject *)obj) -> func_name);
+
+    PyDict_SetItemString(state, "override_existing_globals",
+                         PyBool_FromLong(0));
     return (PyObject *)state;
 }
 
