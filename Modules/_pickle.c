@@ -4451,6 +4451,7 @@ _pickle_Pickler_extract_func_data(PicklerObject *self, PyObject *obj)
 	}
     }
     PyObject *state = PyTuple_New(6);
+    /* use PyTuple_Pack? */
     PyTuple_SET_ITEM(state, 0, co);
     PyTuple_SET_ITEM(state, 1, f_globals);
     PyTuple_SET_ITEM(state, 2, f_defaults);
@@ -7476,6 +7477,68 @@ _pickle_dump_impl(PyObject *module, PyObject *obj, PyObject *file,
 }
 
 /*[clinic input]
+_pickle._fill_function
+
+    obj: 'O'
+        tuple containing the function and the state
+    /
+
+fills a function with its state.
+[clinic start generated code]*/
+
+static PyObject *
+_pickle__fill_function(PyObject *module, PyObject *obj)
+/*[clinic end generated code: output=cedac1428d1651c7 input=f9bd69a977844b20]*/
+    {
+    PyObject *func;
+    PyObject *state;
+    if (!PyTuple_Check(obj)){
+        return NULL;
+    }
+    func = PyTuple_GET_ITEM(obj, 0);
+    state = PyTuple_GET_ITEM(obj, 1);
+
+    if (!PyFunction_Check(func)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    if (!PyDict_Check(state)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+
+    PyObject *f_globals = NULL;
+    f_globals = PyDict_GetItem(obj, PyUnicode_FromString("globals"));
+    PyDict_Update(
+            ((PyFunctionObject *) func) -> func_globals,
+            f_globals);
+
+    PyObject *defaults;
+    defaults = PyDict_GetItem(state, PyUnicode_FromString("defaults"));
+    PyFunction_SetDefaults(func, defaults);
+
+    PyObject *name;
+    name = PyDict_GetItem(state, PyUnicode_FromString("name"));
+    PyObject_SetAttr(func, PyUnicode_FromString("__name__"), name);
+
+    PyObject *dict;
+    dict = PyDict_GetItem(state, PyUnicode_FromString("dict"));
+    PyObject_SetAttr(func, PyUnicode_FromString("__dict__"), dict);
+
+
+    PyObject *closure;
+    closure = PyDict_GetItem(state, PyUnicode_FromString("closure"));
+    PyFunction_SetClosure(func, closure);
+
+    PyObject *f_module;
+    f_module = PyDict_GetItem(state, PyUnicode_FromString("module"));
+    PyObject_SetAttr(func, PyUnicode_FromString("__module__"), f_module);
+
+    return func;
+}
+
+
+/*[clinic input]
 
 _pickle.dumps
 
@@ -7556,9 +7619,44 @@ _pickle_save_function_tuple_impl(PyObject *module, PyObject *obj,
                                  PyObject *protocol, int fix_imports)
 /*[clinic end generated code: output=9120670cc6d004d5 input=14e78d79c5e9163c]*/
 {
+    PyObject *state_tuple = NULL;
+    PyObject *state = NULL;
     PicklerObject *pickler = _Pickler_New();
-    return (PyObject *)pickler;
+    state_tuple = _pickle_Pickler_extract_func_data(pickler, obj);
+    state = PyDict_New();
+
+    PyObject *co;
+    PyObject *f_globals;
+    PyObject *f_defaults;
+    PyObject *processed_closure;
+    PyObject *f_dict;
+    PyObject *f_module;
+
+    co = PyTuple_GET_ITEM(state_tuple, 0);
+    f_globals = PyTuple_GET_ITEM(state_tuple, 1);
+    f_defaults = PyTuple_GET_ITEM(state_tuple, 2);
+    processed_closure = PyTuple_GET_ITEM(state_tuple, 3);
+    f_dict = PyTuple_GET_ITEM(state_tuple, 4);
+    f_module = PyTuple_GET_ITEM(state_tuple, 5);
+
+    PyDict_SetItem(state, PyUnicode_FromString("code"), co);
+    PyDict_SetItem(state, PyUnicode_FromString("globals"), f_globals);
+    PyDict_SetItem(state, PyUnicode_FromString("dict"), f_defaults);
+    PyDict_SetItem(state, PyUnicode_FromString("closure_values"),
+                   processed_closure);
+    PyDict_SetItem(state, PyUnicode_FromString("dict"), f_dict);
+    PyDict_SetItem(state, PyUnicode_FromString("module"), f_module);
+    PyDict_SetItem(state, PyUnicode_FromString("name"),
+                   PyObject_GetAttrString(obj, "__name__"));
+    PyDict_SetItem(state, PyUnicode_FromString("doc"),
+                   PyObject_GetAttrString(obj, "__doc__"));
+    PyDict_SetItem(state, PyUnicode_FromString("override_existing_globals"),
+                   PyBool_FromLong(0));
+    Py_INCREF(state);
+
+    return (PyObject *)state;
 }
+
 
 /*[clinic input]
 
@@ -7683,6 +7781,8 @@ static struct PyMethodDef pickle_methods[] = {
     _PICKLE_LOAD_METHODDEF
     _PICKLE_LOADS_METHODDEF
     _PICKLE_SAVE_FUNCTION_TUPLE_METHODDEF
+    _PICKLE__FILL_FUNCTION_METHODDEF
+
     {NULL, NULL} /* sentinel */
 };
 

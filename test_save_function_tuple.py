@@ -37,6 +37,10 @@ class CloudPickleTest(unittest.TestCase):
                     function_with_nested_func)
         assert cloudpickle_global_ops == pickle_global_op
 
+    def test_save_function_tuple(self):
+        # this does not test anything for now though
+        state = pickle.save_function_tuple(f)
+
 
 if __name__ == "__main__":
     unittest.main()

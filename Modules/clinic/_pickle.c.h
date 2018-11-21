@@ -430,6 +430,18 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(_pickle__fill_function__doc__,
+"_fill_function($module, obj, /)\n"
+"--\n"
+"\n"
+"fills a function with its state.\n"
+"\n"
+"  obj\n"
+"    tuple containing the function and the state");
+
+#define _PICKLE__FILL_FUNCTION_METHODDEF    \
+    {"_fill_function", (PyCFunction)_pickle__fill_function, METH_O, _pickle__fill_function__doc__},
+
 PyDoc_STRVAR(_pickle_dumps__doc__,
 "dumps($module, /, obj, protocol=None, *, fix_imports=True)\n"
 "--\n"
@@ -626,4 +638,4 @@ _pickle_loads(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=84be732c96d7562c input=a9049054013a1b77]*/
+/*[clinic end generated code: output=d116f4e1f7b4a2d6 input=a9049054013a1b77]*/
