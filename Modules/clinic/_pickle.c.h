@@ -673,4 +673,4 @@ _pickle_loads(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=d116f4e1f7b4a2d6 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=9295272b8c8be307 input=a9049054013a1b77]*/
