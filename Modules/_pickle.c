@@ -7587,6 +7587,81 @@ _pickle_dumps_impl(PyObject *module, PyObject *obj, PyObject *protocol,
     return NULL;
 }
 
+
+/* TODO write save_subimports */
+
+/*[clinic input]
+
+_pickle.make_skel_func
+
+  code: object
+  cell_count: object
+  base_globals: object
+  /
+
+Creates a skeleton function object.
+
+This skeleton contains just the provided code and the correct number of cells
+in func_closure.  All other func attributes (e.g. func_globals) are empty.
+[clinic start generated code]*/
+
+static PyObject *
+_pickle_make_skel_func_impl(PyObject *module, PyObject *code,
+                            PyObject *cell_count, PyObject *base_globals)
+/*[clinic end generated code: output=ae1a4eb3b2c29264 input=60a810308d770523]*/
+{
+    PyObject *closure;
+    PyFunctionObject *newfunc;
+    int c_cell_count;
+    PyObject *f_base_module;
+    PyObject *func_global_namespace;
+
+    if (base_globals == Py_None){
+        func_global_namespace = PyDict_New();
+    }
+
+    else if PyUnicode_Check(base_globals){
+        f_base_module = PyImport_ImportModule(
+                PyUnicode_AsUTF8(base_globals));
+
+        if (f_base_module == NULL){
+            func_global_namespace = PyDict_New();
+            PyErr_Format(PyExc_RuntimeError,
+                         "module %s was not found", base_globals);
+            return NULL;
+        }
+        else {
+            func_global_namespace = PyModule_GetDict(f_base_module);
+        }
+        /* TODO implement dynamic module cache?*/
+    }
+    PyDict_SetItem(func_global_namespace, PyUnicode_FromString("__builtins__"),
+                   PyEval_GetBuiltins());
+    Py_INCREF(PyEval_GetBuiltins());
+    Py_INCREF(PyEval_GetBuiltins());
+
+    c_cell_count = PyLong_AS_LONG(cell_count);
+
+    if (c_cell_count <= 0){
+        closure = Py_None;
+        Py_INCREF(Py_None);
+    }
+    else {
+        closure = PyTuple_New(c_cell_count);
+        Py_ssize_t i;
+        for (i = 0; i < c_cell_count; i++){
+            PyTuple_SET_ITEM(closure, i, PyCell_New(NULL));
+        }
+    }
+    /* probably should not be used as not part of the API */
+
+    newfunc = (PyFunctionObject *)PyFunction_New((PyObject *)code,
+                                                 func_global_namespace);
+    ((PyFunctionObject *)newfunc)->func_closure = closure;
+    return (PyObject *)newfunc;
+}
+
+
 /*[clinic input]
 
 _pickle.save_function_tuple
@@ -7780,6 +7855,7 @@ static struct PyMethodDef pickle_methods[] = {
     _PICKLE_LOADS_METHODDEF
     _PICKLE_SAVE_FUNCTION_TUPLE_METHODDEF
     _PICKLE__FILL_FUNCTION_METHODDEF
+    _PICKLE_MAKE_SKEL_FUNC_METHODDEF
 
     {NULL, NULL} /* sentinel */
 };

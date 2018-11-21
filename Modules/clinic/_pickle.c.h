@@ -488,6 +488,41 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(_pickle_make_skel_func__doc__,
+"make_skel_func($module, code, cell_count, base_globals, /)\n"
+"--\n"
+"\n"
+"Creates a skeleton function object.\n"
+"\n"
+"This skeleton contains just the provided code and the correct number of cells\n"
+"in func_closure.  All other func attributes (e.g. func_globals) are empty.");
+
+#define _PICKLE_MAKE_SKEL_FUNC_METHODDEF    \
+    {"make_skel_func", (PyCFunction)_pickle_make_skel_func, METH_FASTCALL, _pickle_make_skel_func__doc__},
+
+static PyObject *
+_pickle_make_skel_func_impl(PyObject *module, PyObject *code,
+                            PyObject *cell_count, PyObject *base_globals);
+
+static PyObject *
+_pickle_make_skel_func(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *code;
+    PyObject *cell_count;
+    PyObject *base_globals;
+
+    if (!_PyArg_UnpackStack(args, nargs, "make_skel_func",
+        3, 3,
+        &code, &cell_count, &base_globals)) {
+        goto exit;
+    }
+    return_value = _pickle_make_skel_func_impl(module, code, cell_count, base_globals);
+
+exit:
+    return return_value;
+}
+
 PyDoc_STRVAR(_pickle_save_function_tuple__doc__,
 "save_function_tuple($module, /, obj, protocol=None, *, fix_imports=True)\n"
 "--\n"
