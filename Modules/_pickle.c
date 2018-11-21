@@ -4442,14 +4442,12 @@ _pickle_Pickler_extract_func_data(PicklerObject *self, PyObject *obj)
         f_module = PyDict_New();
         }
 
-    PyObject *f_defaults = NULL;
-    _Py_IDENTIFIER(__defaults__);
-    if (_PyObject_LookupAttrId((PyObject *)obj,
-                               &PyId___defaults__, &f_defaults) > 0) {
-	if (f_module == Py_None){
-	    f_module = PyDict_New();
-	}
-    }
+    PyObject *f_defaults;
+    f_defaults = PyFunction_GetDefaults(obj);
+    if (f_defaults == NULL)
+        f_defaults = Py_None;
+        Py_INCREF(Py_None);
+
     PyObject *state = PyTuple_New(6);
     /* use PyTuple_Pack? */
     PyTuple_SET_ITEM(state, 0, co);
@@ -7508,35 +7506,35 @@ _pickle__fill_function(PyObject *module, PyObject *obj)
     }
 
     PyObject *f_globals = NULL;
-    f_globals = PyDict_GetItem(obj, PyUnicode_FromString("globals"));
+    f_globals = PyDict_GetItemString(state, "globals");
     PyDict_Update(
             ((PyFunctionObject *) func) -> func_globals,
             f_globals);
 
     PyObject *defaults;
-    defaults = PyDict_GetItem(state, PyUnicode_FromString("defaults"));
+    defaults = PyDict_GetItemString(state, "defaults");
     PyFunction_SetDefaults(func, defaults);
 
     PyObject *name;
-    name = PyDict_GetItem(state, PyUnicode_FromString("name"));
-    PyObject_SetAttr(func, PyUnicode_FromString("__name__"), name);
+    name = PyDict_GetItemString(state, "name");
+    PyObject_SetAttrString(func, "__name__", name);
 
     PyObject *dict;
-    dict = PyDict_GetItem(state, PyUnicode_FromString("dict"));
-    PyObject_SetAttr(func, PyUnicode_FromString("__dict__"), dict);
+    dict = PyDict_GetItemString(state, "dict");
+    PyObject_SetAttrString(func, "__dict__", dict);
 
 
     PyObject *closure;
-    closure = PyDict_GetItem(state, PyUnicode_FromString("closure"));
+    closure = PyDict_GetItemString(state, "closure_values");
     PyFunction_SetClosure(func, closure);
 
     PyObject *f_module;
-    f_module = PyDict_GetItem(state, PyUnicode_FromString("module"));
-    PyObject_SetAttr(func, PyUnicode_FromString("__module__"), f_module);
+    f_module = PyDict_GetItemString(state, "module");
+    PyObject_SetAttrString(func, "__module__", f_module);
 
+    Py_INCREF(func);
     return func;
 }
-
 
 /*[clinic input]
 
