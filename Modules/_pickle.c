@@ -3596,6 +3596,37 @@ save_global(PicklerObject *self, PyObject *obj, PyObject *name)
     return status;
 }
 
+static int save_code(PicklerObject *self, PyObject *obj){
+    PyObject *args;
+    args = PyTuple_New(15);
+
+    PyTuple_SET_ITEM(args, 0, PyLong_FromLong(((PyCodeObject *)obj) -> co_argcount));
+    PyTuple_SET_ITEM(args, 1, PyLong_FromLong(((PyCodeObject *)obj) -> co_kwonlyargcount));
+    PyTuple_SET_ITEM(args, 2, PyLong_FromLong(((PyCodeObject *)obj) -> co_nlocals));
+    PyTuple_SET_ITEM(args, 3, PyLong_FromLong(((PyCodeObject *)obj) -> co_stacksize));
+    PyTuple_SET_ITEM(args, 4, PyLong_FromLong(((PyCodeObject *)obj) -> co_flags));
+    PyTuple_SET_ITEM(args, 5, ((PyCodeObject *)obj) -> co_code);
+    PyTuple_SET_ITEM(args, 6, ((PyCodeObject *)obj) -> co_consts);
+    PyTuple_SET_ITEM(args, 7, ((PyCodeObject *)obj) -> co_names);
+    PyTuple_SET_ITEM(args, 8, ((PyCodeObject *)obj) -> co_varnames);
+    PyTuple_SET_ITEM(args, 9, ((PyCodeObject *)obj) -> co_filename);
+    PyTuple_SET_ITEM(args, 10, ((PyCodeObject *)obj) -> co_name);
+    PyTuple_SET_ITEM(args, 11, PyLong_FromLong(((PyCodeObject *)obj) -> co_firstlineno ));
+    PyTuple_SET_ITEM(args, 12, ((PyCodeObject *)obj) -> co_lnotab);
+    PyTuple_SET_ITEM(args, 13, ((PyCodeObject *)obj) -> co_freevars);
+    PyTuple_SET_ITEM(args, 14, ((PyCodeObject *)obj) -> co_cellvars);
+
+    PyObject *overall_args  = PyTuple_New(2);
+    PyObject *types_module;
+    PyObject *types_new;
+    types_module = PyImport_ImportModule("types");
+    types_new = PyObject_GetAttrString(types_module, "CodeType");
+    PyTuple_SET_ITEM(overall_args, 0, types_new);
+    PyTuple_SET_ITEM(overall_args, 1, args);
+
+    save_reduce(self, overall_args, obj);
+    return 0;
+}
 static int
 save_singleton_type(PicklerObject *self, PyObject *obj, PyObject *singleton)
 {
@@ -4075,6 +4106,12 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
     else if (type == &PyFunction_Type) {
         /* modify this */
         status = save_global(self, obj, NULL);
+        goto done;
+    }
+
+    else if (type == &PyCode_Type) {
+        /* modify this */
+        status = save_code(self, obj);
         goto done;
     }
     /* add other methods like save_*/
@@ -7712,25 +7749,70 @@ _pickle_save_function_tuple_impl(PyObject *module, PyObject *obj,
     f_dict = PyTuple_GET_ITEM(state_tuple, 4);
     f_module = PyTuple_GET_ITEM(state_tuple, 5);
 
-    PyDict_SetItemString(state, "code", co);
-    PyDict_SetItemString(state, "globals", f_globals);
-    PyDict_SetItemString(state, "defaults", f_defaults);
-    PyDict_SetItemString(state, "closure_values", processed_closure);
-    PyDict_SetItemString(state, "dict", f_dict);
-    PyDict_SetItemString(state, "base_globals", f_module);
-    PyDict_SetItemString(state, "name",
-                        ((PyFunctionObject *)obj) -> func_name);
-    PyDict_SetItemString(state, "doc",
-                        ((PyFunctionObject *)obj) -> func_doc);
-    PyDict_SetItemString(state, "module", PyFunction_GET_MODULE(obj));
-
-
+    Py_INCREF(co);
+    Py_INCREF(f_globals);
+    Py_INCREF(f_defaults);
+    Py_INCREF(processed_closure);
+    Py_INCREF(f_dict);
+    Py_INCREF(f_module);
     Py_INCREF(((PyFunctionObject *)obj) -> func_doc);
     Py_INCREF(((PyFunctionObject *)obj) -> func_name);
 
+    /* PyDict_SetItemString(state, "code", co); */
+    /* PyDict_SetItemString(state, "globals", f_globals); */
+    /* PyDict_SetItemString(state, "defaults", f_defaults); */
+    /* PyDict_SetItemString(state, "closure_values", processed_closure); */
+    /* PyDict_SetItemString(state, "dict", f_dict); */
+    /* PyDict_SetItemString(state, "base_globals", f_module); */
+    /* PyDict_SetItemString(state, "name", */
+    /*                     ((PyFunctionObject *)obj) -> func_name); */
+    /* PyDict_SetItemString(state, "doc", */
+    /*                     ((PyFunctionObject *)obj) -> func_doc); */
+    /* PyDict_SetItemString(state, "module", PyFunction_GET_MODULE(obj)); */
     PyDict_SetItemString(state, "override_existing_globals",
                          PyBool_FromLong(0));
-    return (PyObject *)state;
+    /* Py_INCREF(state); */
+
+
+    /* Py_INCREF(((PyFunctionObject *)obj) -> func_doc); */
+    /* Py_INCREF(((PyFunctionObject *)obj) -> func_name); */
+
+
+    PyObject *fill_function, *make_skel_func_function;
+
+    fill_function = PyObject_GetAttrString(module, "_fill_function");
+    make_skel_func_function = PyObject_GetAttrString(
+            module, "make_skel_func");
+
+
+    save_global(pickler, fill_function, NULL);
+    const char mark_op = MARK;
+    const char reduce_op = REDUCE;
+    if (_Pickler_Write(pickler, &mark_op, 1) < 0)
+        return NULL;
+    save_global(pickler, make_skel_func_function, NULL);
+    PyObject *save_global_args = PyTuple_New(3);
+    PyTuple_SET_ITEM(save_global_args, 0, co);
+    if (processed_closure == Py_None) {
+        PyTuple_SET_ITEM(save_global_args, 1, PyLong_FromLong(-1));
+    }
+    else {
+        PyTuple_SET_ITEM(save_global_args, 1, processed_closure);
+    }
+    PyTuple_SET_ITEM(save_global_args, 2, f_module);
+
+    save_tuple(pickler, save_global_args);
+    if (_Pickler_Write(pickler, &reduce_op, 1) < 0)
+        return NULL;
+
+    Pickler_get_memo(pickler);
+    memo_put(pickler, obj);
+    save(pickler, state, 0);
+
+    PyObject *result;
+    result = _Pickler_GetString(pickler);
+    Py_DECREF(pickler);
+    return result;
 }
 
 
