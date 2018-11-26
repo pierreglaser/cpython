@@ -23,6 +23,7 @@ Misc variables:
 
 """
 
+import types
 from types import FunctionType
 from copyreg import dispatch_table
 from copyreg import _extension_registry, _inverted_registry, _extension_cache
@@ -60,6 +61,12 @@ HIGHEST_PROTOCOL = 4
 # Only bump this if the oldest still supported version of Python already
 # includes it.
 DEFAULT_PROTOCOL = 4
+
+
+def subimport(name):
+    __import__(name)
+    return sys.modules[name]
+
 
 class PickleError(Exception):
     """A common base class for the other pickling exceptions."""
@@ -661,6 +668,15 @@ class _Pickler:
     # Methods below this point are dispatched through the dispatch table
 
     dispatch = {}
+
+    def save_module(self, obj):
+        """
+        Save a module as an import
+        """
+        self.modules.add(obj)
+        self.save_reduce(subimport, (obj.__name__,), obj=obj)
+
+    dispatch[types.ModuleType] = save_module
 
     def save_none(self, obj):
         self.write(NONE)
