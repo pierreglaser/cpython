@@ -2264,6 +2264,11 @@ class AbstractPickleTests(unittest.TestCase):
                 self.assertIs(unpickled, Recursive)
         del Recursive.mod # break reference loop
 
+    def test_module(self):
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            unpickled = self.loads(self.dumps(pickle, proto))
+            self.assertIs(pickle, unpickled)
+
     def test_py_methods(self):
         global PyMethodsTest
         class PyMethodsTest:
