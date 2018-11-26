@@ -8,13 +8,15 @@ import pickletools
 import struct
 import sys
 import unittest
+import textwrap
 import weakref
 from http.cookies import SimpleCookie
 
 from test import support
+from test.support.script_helper import assert_python_ok
 from test.support import (
     TestFailed, TESTFN, run_with_locale, no_tracing,
-    _2G, _4G, bigmemtest,
+    _2G, _4G, bigmemtest, unlink
     )
 
 from pickle import bytes_types
@@ -2268,6 +2270,86 @@ class AbstractPickleTests(unittest.TestCase):
         for proto in range(pickle.HIGHEST_PROTOCOL + 1):
             unpickled = self.loads(self.dumps(pickle, proto))
             self.assertIs(pickle, unpickled)
+
+    def test_method_in_main(self):
+        pickled_func_path = 'pickled_func.pk'
+
+        main_subprocess_script = """'''
+        import pickle
+        import textwrap
+
+
+        with open("{pickled_func_path}", "rb") as f:
+            funcs = pickle.load(f)
+
+        assert funcs[0]() == 43
+        depickled_module = funcs[1]()
+        import xml.etree.ElementTree
+        assert depickled_module == xml.etree.ElementTree
+
+        depickled_f2 = funcs[2]
+        assert depickled_f2() == 1
+        assert depickled_f2.additional_module is textwrap
+        assert depickled_f2.constant == 42
+
+        depickled_f3 = funcs[3]
+        assert depickled_f3() == 2
+        assert depickled_f3(1) == 1
+        assert depickled_f3.__defaults__ == (2, )
+        '''""".format(pickled_func_path=pickled_func_path)
+
+        main_script = """
+        import pickle
+        import textwrap
+        import xml.etree
+
+        from test.support.script_helper import assert_python_ok
+
+
+        CONSTANT = 42
+
+
+        # function using a global variable
+        def f0():
+            global CONSTANT
+            a = 1
+            return CONSTANT + 1
+
+        # function using a submodule
+        #    - whose parent module has been imported
+        #    - that neither explicitally imported in the
+        #      current script, nor in the __init__'s of its parent package
+        def f1():
+            y = xml.etree.ElementTree
+            return y
+
+        # function with additional attributes, creating entries in its __dict__
+        def f2():
+            return 1
+
+        # function with default arguments
+        def f3(x=2):
+            return x
+
+        f2.additional_module = textwrap
+        f2.constant = CONSTANT
+
+        with open("{pickled_func_path}", "wb") as f:
+            pickle.dump([f0, f1, f2, f3], f)
+
+        assert_python_ok("-c", {main_subprocess_script}, __isolated=True)
+
+        """.format(pickled_func_path=pickled_func_path,
+                   main_subprocess_script=main_subprocess_script)
+        print(main_script)
+
+        try:
+            assert_python_ok('-c', textwrap.dedent(main_script),
+                             __isolated=True)
+        finally:
+            unlink(pickled_func_path)
+
+
 
     def test_py_methods(self):
         global PyMethodsTest
