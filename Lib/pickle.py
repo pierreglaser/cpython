@@ -23,7 +23,11 @@ Misc variables:
 
 """
 
+import dis
+import importlib
+import opcode
 import types
+import weakref
 from types import FunctionType
 from copyreg import dispatch_table
 from copyreg import _extension_registry, _inverted_registry, _extension_cache
@@ -62,10 +66,84 @@ HIGHEST_PROTOCOL = 4
 # includes it.
 DEFAULT_PROTOCOL = 4
 
+STORE_GLOBAL = opcode.opmap['STORE_GLOBAL']
+DELETE_GLOBAL = opcode.opmap['DELETE_GLOBAL']
+LOAD_GLOBAL = opcode.opmap['LOAD_GLOBAL']
+GLOBAL_OPS = (STORE_GLOBAL, DELETE_GLOBAL, LOAD_GLOBAL)
+
+_BUILTIN_TYPE_NAMES = {
+        types.CodeType: 'CodeType',
+        types.MethodType: 'MethodType'
+        }
 
 def subimport(name):
     __import__(name)
     return sys.modules[name]
+
+
+def _builtin_type(name):
+    return getattr(types, name)
+
+
+def _restore_attr(obj, attr):
+    for key, val in attr.items():
+        setattr(obj, key, val)
+    return obj
+
+
+def _fill_function(*args):
+    """Fill a skeleton function object with the restt of the function's data
+
+    The skeleton itself is created by _make_skel_func()
+    """
+    func, state = args
+
+    # Only set global variables that do not exist.
+    for k, v in state['globals'].items():
+        if k not in func.__globals__:
+            func.__globals__[k] = v
+
+    func.__defaults__ = state['defaults']
+    func.__dict__ = state['dict']
+    func.__annotations__ = state['annotations']
+    func.__doc__ = state['doc']
+    func.__name__ = state['name']
+    func.__module__ = state['module']
+    func.__qualname__ = state['qualname']
+
+    return func
+
+
+def _make_skel_func(code, base_globals=None):
+    """ Creates a skeleton function object that contains just the provided
+        code and the correct number of cells in func_closure.  All other
+        func attributes (e.g. func_globals) are empty.
+    """
+    if base_globals is None:
+        base_globals = {}
+    elif isinstance(base_globals, str):
+        try:
+            # First try to reuse the globals from the module containing the
+            # function. If it is not possible to retrieve it, fallback to an
+            # empty dictionary.
+            base_globals = vars(importlib.import_module(base_globals))
+        except ImportError:
+            base_globals = {}
+
+    base_globals['__builtins__'] = __builtins__
+
+    return types.FunctionType(code, base_globals, None, None, None)
+
+
+def _walk_global_ops(code):
+    """
+    Yield (opcode, argument number) tuples for all
+    global-referencing instructions in *code*.
+    """
+    for instr in dis.get_instructions(code):
+        op = instr.opcode
+        if op in GLOBAL_OPS:
+            yield op, instr.arg
 
 
 class PickleError(Exception):
@@ -420,6 +498,12 @@ class _Pickler:
         self.fast = 0
         self.fix_imports = fix_imports and protocol < 3
 
+        # set of modules to unpickle
+        self.modules = set()
+        # map ids to dictionary. used to ensure that functions can share global
+        # env
+        self.globals_ref = {}
+
     def clear_memo(self):
         """Clears the pickler's "memo".
 
@@ -723,7 +807,117 @@ class _Pickler:
                             # ensure unpickler executes this import
                             self.save(sys.modules[name])
                             # then discards the reference to it
-                            self.write(pickle.POP)
+                            self.write(POP)
+
+    def save_function_tuple(self, func):
+        """  Pickles an actual func object.
+
+        A func comprises: code, globals, defaults, closure, and dict.  We
+        extract and save these, injecting reducing functions at certain points
+        to recreate the func object.  Keep in mind that some of these pieces
+        can contain a ref to the func itself.  Thus, a naive save on these
+        pieces could trigger an infinite loop of save's.  To get around that,
+        we first create a skeleton func object using just the code (this is
+        safe, since this won't contain a ref to the func), and memoize it as
+        soon as it's created.  The other stuff can then be filled in later.
+        """
+        save = self.save
+        write = self.write
+
+        code, f_globals, defaults, closure_values, dct, base_globals = self.extract_func_data(func)  # noqa
+        if closure_values is not None:
+            raise PicklingError('cannot pickle a function with a '
+                                'non-empty closure')
+
+        save(_fill_function)  # skeleton function updater
+        write(MARK)    # beginning of tuple that _fill_function expects
+
+        self._save_subimports(code, f_globals.values())
+
+        # create a skeleton function object and memoize it
+        save(_make_skel_func)
+        save((
+            code,
+            base_globals,
+        ))
+        write(REDUCE)
+        self.memoize(func)
+
+        # save the rest of the func data needed by _fill_function
+        state = {
+            'globals': f_globals,
+            'defaults': defaults,
+            'dict': dct,
+            'closure_values': closure_values,
+            'module': func.__module__,
+            'name': func.__name__,
+            'doc': func.__doc__,
+            'annotations': func.__annotations__,
+            'qualname': func.__qualname__
+        }
+        save(state)
+        write(TUPLE)
+        write(REDUCE)  # applies _fill_function on the tuple
+
+    _extract_code_globals_cache = weakref.WeakKeyDictionary()
+
+    def extract_func_data(self, func):
+        """
+        Turn the function into a tuple of data necessary to recreate it:
+            code, globals, defaults, closure_values, dict
+        """
+        code = func.__code__
+
+        # extract all global ref's
+        func_global_refs = self.extract_code_globals(code)
+
+        # process all variables referenced by global environment
+        f_globals = {}
+        for var in func_global_refs:
+            if var in func.__globals__:
+                f_globals[var] = func.__globals__[var]
+
+        # defaults requires no processing
+        defaults = func.__defaults__
+
+        # process closure
+        closure = func.__closure__
+
+        # save the dict
+        dct = func.__dict__
+
+        base_globals = self.globals_ref.get(id(func.__globals__), None)
+        if base_globals is None:
+            # For functions defined in a well behaved module use
+            # vars(func.__module__) for base_globals. This is necessary to
+            # share the global variables across multiple pickled functions from
+            # this module.
+            if func.__module__ is not None:
+                base_globals = func.__module__
+            else:
+                base_globals = {}
+        self.globals_ref[id(func.__globals__)] = base_globals
+
+        return (code, f_globals, defaults, closure, dct, base_globals)
+
+    def extract_code_globals(cls, co):
+        """
+        Find all globals names read or written to by codeblock co
+        """
+        out_names = cls._extract_code_globals_cache.get(co)
+        if out_names is None:
+            names = co.co_names
+            out_names = {names[oparg] for _, oparg in _walk_global_ops(co)}
+
+            # see if nested function have any global refs
+            if co.co_consts:
+                for const in co.co_consts:
+                    if isinstance(type(const), types.CodeType):
+                        out_names |= cls.extract_code_globals(const)
+
+            cls._extract_code_globals_cache[co] = out_names
+
+        return out_names
 
     def save_none(self, obj):
         self.write(NONE)
@@ -1069,10 +1263,90 @@ class _Pickler:
             return self.save_reduce(type, (NotImplemented,), obj=obj)
         elif obj is type(...):
             return self.save_reduce(type, (...,), obj=obj)
+        elif obj in _BUILTIN_TYPE_NAMES:
+            return self.save_reduce(
+                _builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj)
         return self.save_global(obj)
 
-    dispatch[FunctionType] = save_global
     dispatch[type] = save_type
+
+    def save_function(self, obj, name=None):
+        """ Registered with the dispatch to handle all function types.
+
+        Determines what kind of function obj is (e.g. lambda, defined at
+        interactive prompt, etc) and handles the pickling appropriately.
+        """
+        write = self.write
+
+        if name is None:
+            name = obj.__name__
+        modname = whichmodule(obj, name)
+        themodule = sys.modules[modname]
+
+        if modname == '__main__':
+            themodule = None
+
+        try:
+            lookedup_by_name = getattr(themodule, name, None)
+        except Exception:
+            lookedup_by_name = None
+
+        if themodule:
+            self.modules.add(themodule)
+            if lookedup_by_name is obj:
+                return self.save_global(obj, name)
+
+        # a builtin_function_or_method which comes in as an attribute of some
+        # object (e.g., itertools.chain.from_iterable) will end
+        # up with modname "__main__" and so end up here. But these functions
+        # have no __code__ attribute in CPython, so the handling for
+        # user-defined functions below will fail.
+        # So we pickle them here using save_reduce; have to do it differently
+        # for different python versions.
+        if not hasattr(obj, '__code__'):
+            rv = obj.__reduce_ex__(self.proto)
+            return self.save_reduce(obj=obj, *rv)
+
+        # if func is lambda, def'ed at prompt, is in main, or is nested, then
+        # we'll pickle the actual function object rather than simply saving a
+        # reference (as is done in default pickler), via save_function_tuple.
+        if (getattr(obj, '__name__') == '<lambda>'
+                or getattr(obj.__code__, 'co_filename', None) == '<stdin>'
+                or themodule is None):
+            self.save_function_tuple(obj)
+            return
+        else:
+            # func is nested
+            if lookedup_by_name is None or lookedup_by_name is not obj:
+                self.save_function_tuple(obj)
+                return
+
+        if obj.__dict__:
+            # essentially save_reduce, but workaround needed to avoid recursion
+            self.save(_restore_attr)
+            write(MARK + GLOBAL + modname + '\n' + name + '\n')
+            self.memoize(obj)
+            self.save(obj.__dict__)
+            write(TUPLE + REDUCE)
+        else:
+            write(GLOBAL + modname + '\n' + name + '\n')
+            self.memoize(obj)
+
+    dispatch[types.FunctionType] = save_function
+
+    def save_codeobject(self, obj):
+        """
+        Save a code object
+        """
+        args = (
+            obj.co_argcount, obj.co_kwonlyargcount, obj.co_nlocals,
+            obj.co_stacksize, obj.co_flags, obj.co_code, obj.co_consts,
+            obj.co_names, obj.co_varnames, obj.co_filename, obj.co_name,
+            obj.co_firstlineno, obj.co_lnotab, obj.co_freevars, obj.co_cellvars
+        )
+        self.save_reduce(types.CodeType, args, obj=obj)
+
+    dispatch[types.CodeType] = save_codeobject
 
 
 # Unpickling machinery
