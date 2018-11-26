@@ -678,6 +678,53 @@ class _Pickler:
 
     dispatch[types.ModuleType] = save_module
 
+    def _save_subimports(self, code, top_level_dependencies):
+        """
+        Save submodules used by a function but not listed in its globals.
+
+        In the example below:
+
+        ```
+        import concurrent.futures
+        import cloudpickle
+
+
+        def func():
+            x = concurrent.futures.ThreadPoolExecutor
+
+
+        if __name__ == '__main__':
+            cloudpickle.dumps(func)
+        ```
+
+        the globals extracted by cloudpickle in the function's state include
+        the concurrent module, but not its submodule (here,
+        concurrent.futures), which is the module used by func.
+
+        To ensure that calling the depickled function does not raise an
+        AttributeError, this function looks for any currently loaded submodule
+        that the function uses and whose parent is present in the function
+        globals, and saves it before saving the function.
+        """
+
+        # check if any known dependency is an imported package
+        for x in top_level_dependencies:
+            if (isinstance(x, types.ModuleType) and
+                    hasattr(x, '__package__') and x.__package__):
+                # check if the package has any currently loaded sub-imports
+                prefix = x.__name__ + '.'
+                # A concurrent thread could mutate sys.modules,
+                # make sure we iterate over a copy to avoid exceptions
+                for name in list(sys.modules):
+                    if name.startswith(prefix):
+                        # check whether the function can address the sub-module
+                        tokens = set(name[len(prefix):].split('.'))
+                        if not tokens - set(code.co_names):
+                            # ensure unpickler executes this import
+                            self.save(sys.modules[name])
+                            # then discards the reference to it
+                            self.write(pickle.POP)
+
     def save_none(self, obj):
         self.write(NONE)
     dispatch[type(None)] = save_none
