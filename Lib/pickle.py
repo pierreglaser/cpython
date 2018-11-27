@@ -85,12 +85,6 @@ def _builtin_type(name):
     return getattr(types, name)
 
 
-def _restore_attr(obj, attr):
-    for key, val in attr.items():
-        setattr(obj, key, val)
-    return obj
-
-
 def _fill_function(*args):
     """Fill a skeleton function object with the restt of the function's data
 
@@ -1279,24 +1273,19 @@ class _Pickler:
         write = self.write
 
         if name is None:
+            name = getattr(obj, '__qualname__', None)
+        if name is None:
             name = obj.__name__
+
         modname = whichmodule(obj, name)
         themodule = sys.modules[modname]
 
-        if modname == '__main__':
-            themodule = None
-
         try:
-            lookedup_by_name = getattr(themodule, name, None)
-        except Exception:
+            lookedup_by_name, _ = _getattribute(themodule, name)
+        except (ImportError, KeyError, AttributeError):
             lookedup_by_name = None
 
-        if themodule:
-            self.modules.add(themodule)
-            if lookedup_by_name is obj:
-                return self.save_global(obj, name)
-
-        # a builtin_function_or_method which comes in as an attribute of some
+        # A builtin_function_or_method which comes in as an attribute of some
         # object (e.g., itertools.chain.from_iterable) will end
         # up with modname "__main__" and so end up here. But these functions
         # have no __code__ attribute in CPython, so the handling for
@@ -1307,30 +1296,23 @@ class _Pickler:
             rv = obj.__reduce_ex__(self.proto)
             return self.save_reduce(obj=obj, *rv)
 
-        # if func is lambda, def'ed at prompt, is in main, or is nested, then
-        # we'll pickle the actual function object rather than simply saving a
-        # reference (as is done in default pickler), via save_function_tuple.
-        if (getattr(obj, '__name__') == '<lambda>'
-                or getattr(obj.__code__, 'co_filename', None) == '<stdin>'
-                or themodule is None):
-            self.save_function_tuple(obj)
-            return
+        if lookedup_by_name is not obj:
+            # If obj is not available from its module, it means it is nested.
+            # obj's closure may be not empty, and as pickling closures is not
+            # currently supported, an attribute error is raised.
+            raise AttributeError
         else:
-            # func is nested
-            if lookedup_by_name is None or lookedup_by_name is not obj:
+            if modname != '__main__':
+                self.modules.add(themodule)
+                return self.save_global(obj, name)
+            else:
+                # functions defined in the __main__ modules are not pickle
+                # using the simple attribute path to the function.
+                # (module.submodule.[...].function). Instead, all the elements
+                # necessary to recreate the function from scratch (code, global
+                # variables etc.) are serialized.
                 self.save_function_tuple(obj)
                 return
-
-        if obj.__dict__:
-            # essentially save_reduce, but workaround needed to avoid recursion
-            self.save(_restore_attr)
-            write(MARK + GLOBAL + modname + '\n' + name + '\n')
-            self.memoize(obj)
-            self.save(obj.__dict__)
-            write(TUPLE + REDUCE)
-        else:
-            write(GLOBAL + modname + '\n' + name + '\n')
-            self.memoize(obj)
 
     dispatch[types.FunctionType] = save_function
 
@@ -1934,6 +1916,7 @@ def _loads(s, *, fix_imports=True, encoding="ASCII", errors="strict"):
 
 # Use the faster _pickle if possible
 try:
+    raise ImportError
     from _pickle import (
         PickleError,
         PicklingError,
