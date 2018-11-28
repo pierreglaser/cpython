@@ -2299,6 +2299,9 @@ class AbstractPickleTests(unittest.TestCase):
         '''""".format(pickled_func_path=pickled_func_path)
 
         main_script = """
+        import coverage
+        coverage.process_startup()
+
         import pickle
         import textwrap
         import xml.etree
@@ -2315,10 +2318,11 @@ class AbstractPickleTests(unittest.TestCase):
             a = 1
             return CONSTANT + 1
 
+
         # function using a submodule
-        #    - whose parent module has been imported
-        #    - that neither explicitally imported in the
-        #      current script, nor in the __init__'s of its parent package
+        #  - whose parent module has been imported
+        #  - that neither explicitally imported in the
+        #    current script, nor in the __init__'s of its parent package
         def f1():
             y = xml.etree.ElementTree
             return y
@@ -2327,25 +2331,25 @@ class AbstractPickleTests(unittest.TestCase):
         def f2():
             return 1
 
+        f2.additional_module = textwrap
+        f2.constant = CONSTANT
+
         # function with default arguments
         def f3(x=2):
             return x
 
-        f2.additional_module = textwrap
-        f2.constant = CONSTANT
-
         with open("{pickled_func_path}", "wb") as f:
             pickle.dump([f0, f1, f2, f3], f)
 
-        assert_python_ok("-c", {main_subprocess_script}, __isolated=True)
+        assert_python_ok("-c", {main_subprocess_script})
 
         """.format(pickled_func_path=pickled_func_path,
                    main_subprocess_script=main_subprocess_script)
-        print(main_script)
 
         try:
             assert_python_ok('-c', textwrap.dedent(main_script),
-                             __isolated=True)
+                             # __isolated=True, __cleanenv=True)
+                             )
         finally:
             unlink(pickled_func_path)
 
