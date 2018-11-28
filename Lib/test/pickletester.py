@@ -3,15 +3,19 @@ import copyreg
 import dbm
 import io
 import functools
+import os
+import os.path as op
 import pickle
 import pickletools
 import struct
 import sys
 import unittest
+import tempfile
 import textwrap
 import weakref
 from http.cookies import SimpleCookie
 
+from subprocess import Popen, check_output, PIPE, STDOUT, CalledProcessError
 from test import support
 from test.support.script_helper import assert_python_ok
 from test.support import (
@@ -21,6 +25,8 @@ from test.support import (
 
 from pickle import bytes_types
 
+
+
 requires_32b = unittest.skipUnless(sys.maxsize < 2**32,
                                    "test is only meaningful on 32-bit builds")
 
@@ -29,6 +35,40 @@ requires_32b = unittest.skipUnless(sys.maxsize < 2**32,
 # kind of outer loop.
 protocols = range(pickle.HIGHEST_PROTOCOL + 1)
 
+
+def assert_run_python_script(source_code, timeout=5):
+    """Utility to help check pickleability of objects defined in __main__
+
+    The script provided in the source code should return 0 and not print
+    anything on stderr or stdout.
+    """
+    fd, source_file = tempfile.mkstemp(suffix='_src_test_cloudpickle.py')
+    os.close(fd)
+    try:
+        with open(source_file, 'wb') as f:
+            f.write(source_code.encode('utf-8'))
+        cmd = [sys.executable, source_file]
+        cloudpickle_repo_folder = op.normpath(
+            op.join(op.dirname(__file__), '..'))
+        pythonpath = "{src}/tests:{src}".format(src=cloudpickle_repo_folder)
+        kwargs = {
+            'cwd': cloudpickle_repo_folder,
+            'stderr': STDOUT,
+            'env': {'PYTHONPATH': pythonpath},
+        }
+        # If coverage is running, pass the config file to the subprocess
+        coverage_rc = os.environ.get("COVERAGE_PROCESS_START")
+        if coverage_rc:
+            kwargs['env']['COVERAGE_PROCESS_START'] = coverage_rc
+        try:
+            out = check_output(cmd, **kwargs)
+        except CalledProcessError as e:
+            raise RuntimeError(u"script errored with output:\n%s"
+                               % e.output.decode('utf-8'))
+        if out != b"":
+            raise AssertionError(out.decode('utf-8'))
+    finally:
+        os.unlink(source_file)
 
 # Return True if opcode code appears in the pickle, else False.
 def opcode_in_pickle(code, pickle):
@@ -2347,7 +2387,8 @@ class AbstractPickleTests(unittest.TestCase):
                    main_subprocess_script=main_subprocess_script)
 
         try:
-            assert_python_ok('-c', textwrap.dedent(main_script),
+            # assert_run_python_script
+            assert_run_python_script(textwrap.dedent(main_script),
                              # __isolated=True, __cleanenv=True)
                              )
         finally:
