@@ -2280,6 +2280,9 @@ class AbstractPickleTests(unittest.TestCase):
     def test_method_in_main(self):
         pickled_func_path = 'pickled_func.pk'
 
+        # this script loads pickle objects representing functions defined in a
+        # __main__ module. It makes sure all elements of the original function
+        # are properly retrieved.
         main_subprocess_script = """'''
         import pickle
         import textwrap
@@ -2288,22 +2291,27 @@ class AbstractPickleTests(unittest.TestCase):
         with open("{pickled_func_path}", "rb") as f:
             funcs = pickle.load(f)
 
-        assert funcs[0]() == 43
-        depickled_module = funcs[1]()
+        f0, f1, f2, f3 = funcs
+        assert f0() == 43
+
+        depickled_module = f1()
         import xml.etree.ElementTree
         assert depickled_module == xml.etree.ElementTree
 
-        depickled_f2 = funcs[2]
-        assert depickled_f2() == 1
-        assert depickled_f2.additional_module is textwrap
-        assert depickled_f2.constant == 42
+        assert f2() == 1
+        assert f2.additional_module is textwrap
+        assert f2.constant == 42
 
-        depickled_f3 = funcs[3]
-        assert depickled_f3() == 2
-        assert depickled_f3(1) == 1
-        assert depickled_f3.__defaults__ == (2, )
+        assert f3() == 2
+        assert f3(1) == 1
+        assert f3.__defaults__ == (2, )
         '''""".format(pickled_func_path=pickled_func_path)
 
+        # this script defines a variety of function functions, and pickles
+        # them. It is ran as __main__. Thus, the functions defined in this
+        # script will not be pickled as attribute to a module. They will
+        # instead be handled by pickling each of their attribute, as well as a
+        # specific reconstructor, that will be called at loading time.
         main_script = """
         import pickle
         import textwrap
