@@ -2277,6 +2277,58 @@ class AbstractPickleTests(unittest.TestCase):
             unpickled = self.loads(self.dumps(pickle, proto))
             self.assertIs(pickle, unpickled)
 
+    def test_safe_switch(self):
+        pickled_func_path = 'pickled_func.pk'
+        main_script = """
+        import pickle
+
+
+        def f0(x):
+            return x**2
+
+        with open("{pickled_func_path}", "wb") as f:
+            pickle.dump(f0, f)
+
+        # This function should be properly depickled, since safe mode is off
+        depickled_f0 = pickle.loads(pickle.dumps(f0), safe=False)
+        assert depickled_f0(5) == f0(5)
+
+        with open("{pickled_func_path}", "rb") as f:
+            depickled_f0 = pickle.load(f, safe=False)
+        assert depickled_f0(5) == f0(5)
+
+
+        # Trying to load f0 should raise a PicklingError this time, because
+        # pickle.loads is called with the safe switch on
+        try:
+            pickle.loads(pickle.dumps(f0), safe=True)
+        except pickle.PicklingError:
+            pass
+        else:
+            raise AssertionError('loading this function should raise a'
+                                 ' PicklingError')
+
+        try:
+            with open("{pickled_func_path}", "rb") as f:
+                func = pickle.load(f, safe=True)
+        except pickle.PicklingError:
+            pass
+        else:
+            raise AssertionError('loading this function should raise a'
+                                 ' PicklingError')
+        """.format(pickled_func_path=pickled_func_path)
+
+        try:
+            env_vars = {'COVERAGE_PROCESS_START': os.environ.get(
+                        "COVERAGE_PROCESS_START")}
+            # enabling subprocess coverage requires the creation of a .pth
+            # file, that causes site.py # to raise a DeprecationWarning
+            assert_python_ok('-W', 'ignore::DeprecationWarning',
+                             '-c', textwrap.dedent(main_script),
+                             **env_vars)
+        finally:
+            unlink(pickled_func_path)
+
     def test_method_in_main(self):
         pickled_func_path = 'pickled_func.pk'
 
@@ -2289,7 +2341,7 @@ class AbstractPickleTests(unittest.TestCase):
 
 
         with open("{pickled_func_path}", "rb") as f:
-            funcs = pickle.load(f)
+            funcs = pickle.load(f, safe=False)
 
         f0, f1, f2, f3 = funcs
         assert f0() == 43
@@ -2351,6 +2403,30 @@ class AbstractPickleTests(unittest.TestCase):
 
         with open("{pickled_func_path}", "wb") as f:
             pickle.dump([f0, f1, f2, f3], f)
+
+        # pickling a function with a non empty closure should fail for now
+        def wrapper_function():
+            variable_in_closure = 1
+            def nested_function():
+                nonlocal variable_in_closure
+                return variable_in_closure
+            return nested_function
+
+        wrapped_function = wrapper_function()
+
+        try:
+            pickle.dumps(wrapped_function)
+        except Exception as e:
+            if not isinstance(e, AttributeError):
+                raise AssertionError(
+                    "pickling a nested function with a non empty "
+                    "closure did not raise an AttributeError")
+
+        else:
+            raise AssertionError(
+                "pickling a nested function with a non empty "
+                "closure did not raise an AttributeError")
+
 
         assert_python_ok("-c", {main_subprocess_script})
 
