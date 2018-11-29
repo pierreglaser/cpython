@@ -752,21 +752,21 @@ class _Pickler:
         In the example below:
 
         ```
-        import concurrent.futures
-        import cloudpickle
+        import xml.etree
+        import pickle
 
 
         def func():
-            x = concurrent.futures.ThreadPoolExecutor
+            x = xml.etree.ElementTree
 
 
         if __name__ == '__main__':
-            cloudpickle.dumps(func)
+            pickle.dumps(func)
         ```
 
-        the globals extracted by cloudpickle in the function's state include
-        the concurrent module, but not its submodule (here,
-        concurrent.futures), which is the module used by func.
+        the globals extracted by pickle in the function's state include
+        the xml module, but not its submodule (here,
+        xml.etree), which is the module used by func.
 
         To ensure that calling the depickled function does not raise an
         AttributeError, this function looks for any currently loaded submodule
