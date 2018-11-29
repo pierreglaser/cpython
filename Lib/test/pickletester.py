@@ -36,40 +36,6 @@ requires_32b = unittest.skipUnless(sys.maxsize < 2**32,
 protocols = range(pickle.HIGHEST_PROTOCOL + 1)
 
 
-def assert_run_python_script(source_code, timeout=5):
-    """Utility to help check pickleability of objects defined in __main__
-
-    The script provided in the source code should return 0 and not print
-    anything on stderr or stdout.
-    """
-    fd, source_file = tempfile.mkstemp(suffix='_src_test_cloudpickle.py')
-    os.close(fd)
-    try:
-        with open(source_file, 'wb') as f:
-            f.write(source_code.encode('utf-8'))
-        cmd = [sys.executable, source_file]
-        cloudpickle_repo_folder = op.normpath(
-            op.join(op.dirname(__file__), '..'))
-        pythonpath = "{src}/tests:{src}".format(src=cloudpickle_repo_folder)
-        kwargs = {
-            'cwd': cloudpickle_repo_folder,
-            'stderr': STDOUT,
-            'env': {'PYTHONPATH': pythonpath},
-        }
-        # If coverage is running, pass the config file to the subprocess
-        coverage_rc = os.environ.get("COVERAGE_PROCESS_START")
-        if coverage_rc:
-            kwargs['env']['COVERAGE_PROCESS_START'] = coverage_rc
-        try:
-            out = check_output(cmd, **kwargs)
-        except CalledProcessError as e:
-            raise RuntimeError(u"script errored with output:\n%s"
-                               % e.output.decode('utf-8'))
-        if out != b"":
-            raise AssertionError(out.decode('utf-8'))
-    finally:
-        os.unlink(source_file)
-
 # Return True if opcode code appears in the pickle, else False.
 def opcode_in_pickle(code, pickle):
     for op, dummy, dummy in pickletools.genops(pickle):
@@ -2339,9 +2305,6 @@ class AbstractPickleTests(unittest.TestCase):
         '''""".format(pickled_func_path=pickled_func_path)
 
         main_script = """
-        import coverage
-        coverage.process_startup()
-
         import pickle
         import textwrap
         import xml.etree
@@ -2387,10 +2350,13 @@ class AbstractPickleTests(unittest.TestCase):
                    main_subprocess_script=main_subprocess_script)
 
         try:
-            # assert_run_python_script
-            assert_run_python_script(textwrap.dedent(main_script),
-                             # __isolated=True, __cleanenv=True)
-                             )
+            env_vars = {'COVERAGE_PROCESS_START': os.environ.get(
+                        "COVERAGE_PROCESS_START")}
+            # enabling subprocess coverage requires the creation of a .pth
+            # file, that causes site.py # to raise a DeprecationWarning
+            assert_python_ok('-W', 'ignore::DeprecationWarning',
+                             '-c', textwrap.dedent(main_script),
+                             **env_vars)
         finally:
             unlink(pickled_func_path)
 

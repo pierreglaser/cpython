@@ -1,14 +1,22 @@
-CPYTHON_HOME=$HOME/repos/cpython
 CPYTHON_COV_HOME=$HOME/repos/cpython_coverage
+COVERAGE_PROCESS_START=$HOME/repos/cpython/.coveragerc
 
-COVERAGE_PROCESS_START=/home/pierre/repos/cpython/.coveragerc \
-    COVERAGE_FILE=$CPYTHON_COV_HOME/.coverage python \
-    -mcoverage run --pylib --source pickle Lib/test/regrtest.py test_pickle
+# enable subprocess coverage requires:
+# - creating a .pth file that quickly imports coverage and
+#   coverage.process_startup()
+# - adding COVERAGE_PROCESS_START as an environment variable before running the
+#   tests
 
-pushd $CPYTHON_COV_HOME
-coverage combine
-coverage report
-coverage html
-popd
 
-xdg-open $CPYTHON_COV_HOME/htmlcov/_home_pierre_dev_python_lib_python3_8_pickle_py.html
+python install_coverage_subprocess_pth.py
+
+COVERAGE_PROCESS_START=${COVERAGE_PROCESS_START} python -mcoverage run Lib/test/regrtest.py test_pickle -v
+
+
+python -W remove_coverage_pth_code.py
+
+python -m coverage combine
+python -m coverage report
+python -m coverage html
+
+# xdg-open $CPYTHON_COV_HOME/htmlcov/index.html

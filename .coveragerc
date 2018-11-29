@@ -1,3 +1,5 @@
 [run]
 parallel=True
-data_file=/home/pierre/repos/cpython_coverage/.coverage
+source=pickle
+data_file=/home/pierreglaser/repos/cpython_coverage/.coverage
+cover_pylib=True
