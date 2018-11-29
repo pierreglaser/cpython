@@ -113,18 +113,7 @@ def _make_skel_func(code, base_globals=None):
         code and the correct number of cells in func_closure.  All other
         func attributes (e.g. func_globals) are empty.
     """
-    if base_globals is None:
-        base_globals = {}
-    elif isinstance(base_globals, str):
-        try:
-            # First try to reuse the globals from the module containing the
-            # function. If it is not possible to retrieve it, fallback to an
-            # empty dictionary.
-            base_globals = vars(importlib.import_module(base_globals))
-        except ImportError:
-            base_globals = {}
-
-    base_globals['__builtins__'] = __builtins__
+    base_globals = {'__builtins__': __builtins__}
 
     return types.FunctionType(code, base_globals, None, None, None)
 
