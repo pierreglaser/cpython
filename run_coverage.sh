@@ -13,7 +13,7 @@ python install_coverage_subprocess_pth.py
 COVERAGE_PROCESS_START=${COVERAGE_PROCESS_START} python -mcoverage run Lib/test/regrtest.py test_pickle -v
 
 
-python -W remove_coverage_pth_code.py
+python remove_coverage_pth_code.py
 
 python -m coverage combine
 python -m coverage report
