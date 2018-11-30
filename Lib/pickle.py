@@ -809,8 +809,8 @@ class _Pickler:
 
         code, f_globals, defaults, closure_values, dct, base_globals = self.extract_func_data(func)  # noqa
         if closure_values is not None:
-            raise PicklingError('cannot pickle a function with a '
-                                'non-empty closure')
+            raise AttributeError('cannot pickle a function with a '
+                                 'non-empty closure')
 
         save(_fill_function)  # skeleton function updater
         write(MARK)    # beginning of tuple that _fill_function expects
@@ -892,7 +892,11 @@ class _Pickler:
             names = co.co_names
             out_names = {names[oparg] for _, oparg in _walk_global_ops(co)}
 
-            # see if nested function have any global refs
+            # functions returning another function defined in their own local
+            # scope will constain the codeobject of the local function in
+            # __code__.co_consts. For the main function to be depickled
+            # properly, the globals of this codeobject also need to be
+            # extracted
             if co.co_consts:
                 for const in co.co_consts:
                     if isinstance(type(const), types.CodeType):
@@ -1266,13 +1270,24 @@ class _Pickler:
         if name is None:
             name = obj.__name__
 
-        modname = whichmodule(obj, name)
-        themodule = sys.modules[modname]
+        # look for obj in the __main__ module first. Indeed, if func.__module__
+        # is None, whichmodule will iterate through all modules in sys.modules.
+        # If in addition, multiprocessing is imported, __mp_main__ will exist
+        # as a reference to __main__ in sys.modules. If whichmodule returns
+        # __mp_main__, obj will be pickled using save_global, whereas it should
+        # be pickled by using save_function_tuple
 
         try:
-            lookedup_by_name, _ = _getattribute(themodule, name)
+            lookedup_by_name, _ = _getattribute(sys.modules['__main__'], name)
+            modname = '__main__'
+            themodule = sys.modules['__main__']
         except (ImportError, KeyError, AttributeError):
-            lookedup_by_name = None
+            modname = whichmodule(obj, name)
+            themodule = sys.modules[modname]
+            try:
+                lookedup_by_name, _ = _getattribute(themodule, name)
+            except (ImportError, KeyError, AttributeError):
+                lookedup_by_name = None
 
         # A builtin_function_or_method which comes in as an attribute of some
         # object (e.g., itertools.chain.from_iterable) will end
