@@ -10,7 +10,7 @@ COVERAGE_PROCESS_START=$HOME/repos/cpython/.coveragerc
 
 python install_coverage_subprocess_pth.py
 
-COVERAGE_PROCESS_START=${COVERAGE_PROCESS_START} python -mcoverage run Lib/test/regrtest.py test_pickle -v
+COVERAGE_PROCESS_START=${COVERAGE_PROCESS_START} python -mcoverage run Lib/test/regrtest.py test_pickle -v -m test_method_in_main
 
 
 python remove_coverage_pth_code.py
