@@ -2343,20 +2343,26 @@ class AbstractPickleTests(unittest.TestCase):
         with open("{pickled_func_path}", "rb") as f:
             funcs = pickle.load(f, safe=False)
 
-        f0, f1, f2, f3 = funcs
-        assert f0() == 43
+        f_no_module, f_using_a_global, f_needing_subimport, f_with_dict, \
+                f_with_default_kw = funcs
 
-        depickled_module = f1()
+        assert f_no_module(2) == 4
+
+        assert f_using_a_global() == 43
+
+        depickled_module = f_needing_subimport()
         import xml.etree.ElementTree
         assert depickled_module == xml.etree.ElementTree
 
-        assert f2() == 1
-        assert f2.additional_module is textwrap
-        assert f2.constant == 42
+        assert f_with_dict() == 1
+        assert f_with_dict.additional_module is textwrap
+        assert f_with_dict.constant == 42
 
-        assert f3() == 2
-        assert f3(1) == 1
-        assert f3.__defaults__ == (2, )
+        assert f_with_default_kw() == 2
+        assert f_with_default_kw(1) == 1
+        assert f_with_default_kw.__defaults__ == (2, )
+
+
         '''""".format(pickled_func_path=pickled_func_path)
 
         # this script defines a variety of function functions, and pickles
@@ -2374,9 +2380,17 @@ class AbstractPickleTests(unittest.TestCase):
 
         CONSTANT = 42
 
+        # if a f's __module__ attribute is None, pickling takes a different
+        # path. Especially, the current global variable values won't get
+        # overriden by their value in the module in which the function will be
+        # loaded
+        # TODO: prove this.
+        def f_no_module(x):
+            return x**2
+        f_no_module.__module__ = None
 
         # function using a global variable
-        def f0():
+        def f_using_a_global():
             global CONSTANT
             a = 1
             return CONSTANT + 1
@@ -2386,23 +2400,24 @@ class AbstractPickleTests(unittest.TestCase):
         #  - whose parent module has been imported
         #  - that neither explicitally imported in the
         #    current script, nor in the __init__'s of its parent package
-        def f1():
+        def f_needing_subimport():
             y = xml.etree.ElementTree
             return y
 
         # function with additional attributes, creating entries in its __dict__
-        def f2():
+        def f_with_dict():
             return 1
 
-        f2.additional_module = textwrap
-        f2.constant = CONSTANT
+        f_with_dict.additional_module = textwrap
+        f_with_dict.constant = CONSTANT
 
         # function with default arguments
-        def f3(x=2):
+        def f_with_default_kw(x=2):
             return x
 
         with open("{pickled_func_path}", "wb") as f:
-            pickle.dump([f0, f1, f2, f3], f)
+            pickle.dump([f_no_module, f_using_a_global,f_needing_subimport,
+                         f_with_dict, f_with_default_kw], f)
 
         # pickling a function with a non empty closure should fail for now
         def wrapper_function():
@@ -2426,6 +2441,26 @@ class AbstractPickleTests(unittest.TestCase):
             raise AssertionError(
                 "pickling a nested function with a non empty "
                 "closure did not raise an AttributeError")
+
+        # trying to call save_function_tuple directly should also fail with a
+        # non-empty closure
+        import io
+        bytes_stream = io.BytesIO()
+        from pickle import _Pickler
+        try:
+            _Pickler(bytes_stream).save_function_tuple(wrapped_function)
+        except Exception as e:
+            if not isinstance(e, AttributeError):
+                raise AssertionError(
+                    "pickling a nested function with a non empty "
+                    "closure did not raise an AttributeError")
+        else:
+            raise AssertionError(
+                "pickling a nested function with a non empty "
+                "closure did not raise an AttributeError")
+
+
+
 
 
         assert_python_ok("-c", {main_subprocess_script})
