@@ -3010,6 +3010,35 @@ batch_dict_exact(PicklerObject *self, PyObject *obj)
     return 0;
 }
 
+static int save_code(PicklerObject *self, PyObject *obj){
+    PyObject *type_module = NULL, *code_type = NULL;
+    type_module = PyImport_ImportModule("types");
+    code_type = PyObject_GetAttrString(type_module, "CodeType");
+    save(self, code_type, 0);
+    PyObject *ret = PyTuple_New(15);
+
+    PyTuple_SetItem(ret, 0 , PyObject_GetAttrString(obj, "co_argcount"));
+    PyTuple_SetItem(ret, 1 , PyObject_GetAttrString(obj, "co_kwonlyargcount"));
+    PyTuple_SetItem(ret, 2 , PyObject_GetAttrString(obj, "co_nlocals"));
+    PyTuple_SetItem(ret, 3 , PyObject_GetAttrString(obj, "co_stacksize"));
+    PyTuple_SetItem(ret, 4 , PyObject_GetAttrString(obj, "co_flags"));
+    PyTuple_SetItem(ret, 5 , PyObject_GetAttrString(obj, "co_code"));
+    PyTuple_SetItem(ret, 6 , PyObject_GetAttrString(obj, "co_consts"));
+    PyTuple_SetItem(ret, 7 , PyObject_GetAttrString(obj, "co_names"));
+    PyTuple_SetItem(ret, 8 , PyObject_GetAttrString(obj, "co_varnames"));
+    PyTuple_SetItem(ret, 9,  PyObject_GetAttrString(obj, "co_filename"));
+    PyTuple_SetItem(ret, 10, PyObject_GetAttrString(obj, "co_name"));
+    PyTuple_SetItem(ret, 11, PyObject_GetAttrString(obj, "co_firstlineno"));
+    PyTuple_SetItem(ret, 12, PyObject_GetAttrString(obj, "co_lnotab"));
+    PyTuple_SetItem(ret, 13, PyObject_GetAttrString(obj, "co_cellvars"));
+    PyTuple_SetItem(ret, 14, PyTuple_New(0));
+
+    save(self, ret, 0);
+    const char reduce_op = REDUCE;
+    _Pickler_Write(self, &reduce_op, 1);
+    return 0;
+}
+
 static int
 save_dict(PicklerObject *self, PyObject *obj)
 {
@@ -4021,6 +4050,10 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
     else if (type == &PyType_Type) {
         status = save_type(self, obj);
         goto done;
+    }
+    else if (type == &PyCode_Type) {
+       status = save_code(self, obj);
+       goto done;
     }
     else if (type == &PyFunction_Type) {
         status = save_global(self, obj, NULL);
