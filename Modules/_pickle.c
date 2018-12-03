@@ -7,6 +7,7 @@
 
 #include "Python.h"
 #include "structmember.h"
+#include "opcode.h"
 
 PyDoc_STRVAR(pickle_module_doc,
 "Optimized C implementation for the Python pickle module.");
@@ -3933,6 +3934,198 @@ save_reduce(PicklerObject *self, PyObject *args, PyObject *obj)
     return 0;
 }
 
+static int fill_globals(PyObject *co, PyObject **val){
+    PyObject *co_code, *co_names, *co_consts;
+    PyObject *op, *seq;
+    PyObject *global_var_names;
+
+    global_var_names = PyList_New(0);
+    Py_ssize_t oparg;
+    int i, len, first_arg_byte;
+    int extended_arg = 0;
+
+    co_code = ((PyCodeObject *)co)->co_code;
+    co_names = ((PyCodeObject *)co)->co_names;
+    co_consts = ((PyCodeObject *)co)->co_consts;
+
+    Py_INCREF(co_code);
+    Py_INCREF(co_names);
+    Py_INCREF(co_consts);
+
+    seq = PySequence_Fast(co_code, "expected a sequence");
+    len = PySequence_Size(co_code);
+
+    i = 0;
+    while(i < len){
+        op = PySequence_Fast_GET_ITEM(seq, i);
+        if (HAS_ARG(PyLong_AS_LONG(op))){
+            first_arg_byte = PyLong_AS_LONG(PySequence_Fast_GET_ITEM(seq, i+1));
+
+
+            extended_arg = 0;
+            oparg = first_arg_byte | extended_arg;
+
+            if (PyLong_AS_LONG(op) == EXTENDED_ARG){
+                extended_arg = oparg << 8;
+            }
+            if (PyLong_AS_LONG(op) == STORE_GLOBAL ||
+                PyLong_AS_LONG(op) == DELETE_GLOBAL ||
+                PyLong_AS_LONG(op) == LOAD_GLOBAL){
+
+
+                PyObject *name = PyTuple_GetItem(co_names, oparg);
+                PyList_Append(global_var_names,
+                              name);
+                /* Py_INCREF(global_var_names); */
+            }
+        }
+        i+=2;
+    }
+    if (co_consts != Py_None){
+        PyObject *const_seq = PySequence_Fast(
+                co_consts, "expected a sequence");
+        Py_ssize_t consts_len = PySequence_Size(co_consts);
+        int j = 0;
+        PyObject *next_const;
+        while (j < consts_len){
+            next_const = PySequence_Fast_GET_ITEM(const_seq, j);
+            if (Py_TYPE(next_const) == &PyCode_Type){
+            /* TODO: this will not work, i need to append to the current
+             * val and not override. I need to write a test to
+             * make sure that works. */
+                PyObject *globals_from_nested_funcs = PyList_New(0);
+                fill_globals(next_const, &globals_from_nested_funcs);
+                _PyList_Extend((PyListObject *)global_var_names,
+                               globals_from_nested_funcs);
+            }
+            j++;
+
+        }
+    }
+
+    *val = global_var_names;
+    return 1;
+}
+
+
+static PyObject *
+extract_func_data(PicklerObject *self, PyObject *obj)
+{
+    PyObject *co;
+    PickleState *st = _Pickle_GetGlobalState();
+
+    _Py_IDENTIFIER(__code__);
+    if (_PyObject_LookupAttrId((PyObject *)obj, &PyId___code__, &co) < 0) {
+        return NULL;
+    }
+
+
+    /* add attribute error handling for PyPy builtin-code object? */
+
+    PyObject *global_names, *globals;
+    PyObject *f_globals = PyDict_New();
+
+    fill_globals(co, &global_names);
+    globals = PyFunction_GetGlobals(obj);
+    PyObject *iterator = PyObject_GetIter(global_names);
+    PyObject *item;
+
+    while (item = PyIter_Next(iterator)) {
+        PyDict_SetItem(f_globals, item, PyDict_GetItem(globals, item));
+        Py_DECREF(item);
+    }
+
+    if (PyErr_Occurred()) {
+        return NULL;
+    }
+
+    /* process closure */
+    _Py_IDENTIFIER(__closure__);
+    PyObject *closure = NULL;
+    if (_PyObject_LookupAttrId((PyObject *)obj,
+                               &PyId___closure__, &closure) < 0) {
+        PyErr_SetString(st->PicklingError, "no __closure__ attribute");
+        return NULL;
+    }
+
+    PyObject *f_dict = NULL;
+    _Py_IDENTIFIER(__dict__);
+    if (_PyObject_LookupAttrId((PyObject *)obj,
+                               &PyId___dict__, &f_dict) < 0) {
+        PyErr_SetString(st->PicklingError, "no __dict__ attribute");
+        return NULL;
+    }
+
+    _Py_IDENTIFIER(__module__);
+    PyObject *f_module = NULL;
+    if ((_PyObject_LookupAttrId((PyObject *)obj,
+                    &PyId___module__, &f_module) < 0) ||
+        (f_module == Py_None)) {
+        f_module = PyDict_New();
+        }
+
+    PyObject *f_defaults;
+    f_defaults = PyFunction_GetDefaults(obj);
+    if (f_defaults == NULL)
+        f_defaults = Py_None;
+        Py_INCREF(Py_None);
+
+    PyObject *state = PyTuple_New(6);
+    /* use PyTuple_Pack? */
+    PyTuple_SET_ITEM(state, 0, co);
+    PyTuple_SET_ITEM(state, 1, f_globals);
+    PyTuple_SET_ITEM(state, 2, f_defaults);
+    PyTuple_SET_ITEM(state, 3, closure);
+    PyTuple_SET_ITEM(state, 4, f_dict);
+    PyTuple_SET_ITEM(state, 5, f_module);
+    return state;
+}
+
+static int 
+save_function(PicklerObject *self, PyObject *obj)
+{
+    PyObject *module = NULL;
+    PyObject *module_name = NULL;
+    PyObject *global_name = NULL;
+    PyObject *dotted_path = NULL;
+    int status = 0;
+
+    _Py_IDENTIFIER(__name__);
+    _Py_IDENTIFIER(__qualname__);
+
+    if (_PyObject_LookupAttrId(obj, &PyId___qualname__, &global_name) < 0)
+        goto error;
+    if (global_name == NULL) {
+        global_name = _PyObject_GetAttrId(obj, &PyId___name__);
+        if (global_name == NULL)
+            goto error;
+    }
+
+    dotted_path = get_dotted_path(module, global_name);
+    if (dotted_path == NULL)
+        goto error;
+    module_name = whichmodule(obj, dotted_path);
+
+    if (module_name == NULL)
+        goto error;
+
+    else if (_PyUnicode_EqualToASCIIString(module_name, "__main__")) {
+        PyObject *state = NULL;
+        state = extract_func_data(self, obj);
+        save_tuple(self, state);
+    }
+    else {
+        save_global(self, obj, NULL);
+
+    }
+
+    if (0) {
+  error:
+        status = -1;
+    }
+    return status;
+}
+
 static int
 save(PicklerObject *self, PyObject *obj, int pers_save)
 {
@@ -4023,7 +4216,7 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
         goto done;
     }
     else if (type == &PyFunction_Type) {
-        status = save_global(self, obj, NULL);
+        status = save_function(self, obj);
         goto done;
     }
 
