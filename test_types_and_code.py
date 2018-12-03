@@ -9,3 +9,6 @@ def f():
 
 print(pickle.dumps(f.__code__))
 print(pickle.loads(pickle.dumps(f.__code__)))
+
+print(pickle.dumps(types.FunctionType))
+print(pickle.loads(pickle.dumps(types.FunctionType)))
