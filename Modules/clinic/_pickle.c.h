@@ -2,6 +2,40 @@
 preserve
 [clinic start generated code]*/
 
+PyDoc_STRVAR(_pickle_make_skel_func__doc__,
+"make_skel_func($module, code, base_globals, /)\n"
+"--\n"
+"\n"
+"Creates a skeleton function object.\n"
+"\n"
+"This skeleton contains just the provided code and the correct number of cells\n"
+"in func_closure.  All other func attributes (e.g. func_globals) are empty.");
+
+#define _PICKLE_MAKE_SKEL_FUNC_METHODDEF    \
+    {"make_skel_func", (PyCFunction)_pickle_make_skel_func, METH_FASTCALL, _pickle_make_skel_func__doc__},
+
+static PyObject *
+_pickle_make_skel_func_impl(PyObject *module, PyObject *code,
+                            PyObject *base_globals);
+
+static PyObject *
+_pickle_make_skel_func(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *code;
+    PyObject *base_globals;
+
+    if (!_PyArg_UnpackStack(args, nargs, "make_skel_func",
+        2, 2,
+        &code, &base_globals)) {
+        goto exit;
+    }
+    return_value = _pickle_make_skel_func_impl(module, code, base_globals);
+
+exit:
+    return return_value;
+}
+
 PyDoc_STRVAR(_pickle_Pickler_clear_memo__doc__,
 "clear_memo($self, /)\n"
 "--\n"
@@ -412,6 +446,37 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(_pickle__fill_function__doc__,
+"_fill_function($module, func, state, /)\n"
+"--\n"
+"\n"
+"fills a function with its state.");
+
+#define _PICKLE__FILL_FUNCTION_METHODDEF    \
+    {"_fill_function", (PyCFunction)_pickle__fill_function, METH_FASTCALL, _pickle__fill_function__doc__},
+
+static PyObject *
+_pickle__fill_function_impl(PyObject *module, PyObject *func,
+                            PyObject *state);
+
+static PyObject *
+_pickle__fill_function(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *func;
+    PyObject *state;
+
+    if (!_PyArg_UnpackStack(args, nargs, "_fill_function",
+        2, 2,
+        &func, &state)) {
+        goto exit;
+    }
+    return_value = _pickle__fill_function_impl(module, func, state);
+
+exit:
+    return return_value;
+}
+
 PyDoc_STRVAR(_pickle_dumps__doc__,
 "dumps($module, /, obj, protocol=None, *, fix_imports=True)\n"
 "--\n"
@@ -562,4 +627,4 @@ _pickle_loads(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=6fc104b8299c82dd input=a9049054013a1b77]*/
+/*[clinic end generated code: output=b95828b6ce3ab299 input=a9049054013a1b77]*/

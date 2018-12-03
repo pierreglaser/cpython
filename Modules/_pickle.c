@@ -4036,6 +4036,58 @@ static int fill_globals(PyObject *co, PyObject **val){
     return 1;
 }
 
+/*[clinic input]
+_pickle.make_skel_func
+
+  code: object
+  base_globals: object
+  /
+
+Creates a skeleton function object.
+
+This skeleton contains just the provided code and the correct number of cells
+in func_closure.  All other func attributes (e.g. func_globals) are empty.
+[clinic start generated code]*/
+
+static PyObject *
+_pickle_make_skel_func_impl(PyObject *module, PyObject *code,
+                            PyObject *base_globals)
+/*[clinic end generated code: output=8671cb7220fc8cd5 input=241e46d9fbaa89f0]*/
+
+{
+    PyFunctionObject *newfunc;
+    PyObject *f_base_module;
+    PyObject *func_global_namespace;
+
+    if (base_globals == Py_None){
+        func_global_namespace = PyDict_New();
+    }
+
+    else if PyUnicode_Check(base_globals){
+        f_base_module = PyImport_ImportModule(
+                PyUnicode_AsUTF8(base_globals));
+
+        if (f_base_module == NULL){
+            func_global_namespace = PyDict_New();
+            PyErr_Format(PyExc_RuntimeError,
+                         "module %s was not found", base_globals);
+            return NULL;
+        }
+        else {
+            func_global_namespace = PyModule_GetDict(f_base_module);
+        }
+        /* TODO implement dynamic module cache?*/
+    }
+    PyDict_SetItem(func_global_namespace, PyUnicode_FromString("__builtins__"),
+                   PyEval_GetBuiltins());
+    Py_INCREF(PyEval_GetBuiltins());
+
+    /* probably should not be used as not part of the API */
+
+    newfunc = (PyFunctionObject *)PyFunction_New((PyObject *)code,
+                                                 func_global_namespace);
+    return (PyObject *)newfunc;
+}
 
 static PyObject *
 extract_func_data(PicklerObject *self, PyObject *obj)
@@ -4139,9 +4191,61 @@ save_function(PicklerObject *self, PyObject *obj)
         goto error;
 
     else if (_PyUnicode_EqualToASCIIString(module_name, "__main__")) {
-        PyObject *state = NULL;
-        state = extract_func_data(self, obj);
-        save_tuple(self, state);
+        PyObject *pickle_module = PyImport_ImportModule("_pickle");
+        PyObject *_fill_function_obj, *make_skel_func_obj;
+        const char mark_op = MARK;
+        const char reduce_op = REDUCE;
+        const char tuple_op = TUPLE;
+
+        make_skel_func_obj = PyObject_GetAttrString(pickle_module,
+                "make_skel_func");
+        _fill_function_obj = PyObject_GetAttrString(pickle_module,
+                "_fill_function");
+
+        PyObject *state_tuple = extract_func_data(self, obj);
+        PyObject *co, *f_globals, *f_defaults, *processed_closure, *f_dict;
+        PyObject *f_module;
+
+        co = PyTuple_GET_ITEM(state_tuple, 0);
+        f_globals = PyTuple_GET_ITEM(state_tuple, 1);
+        f_defaults = PyTuple_GET_ITEM(state_tuple, 2);
+        processed_closure = PyTuple_GET_ITEM(state_tuple, 3);
+        f_dict = PyTuple_GET_ITEM(state_tuple, 4);
+        f_module = PyTuple_GET_ITEM(state_tuple, 5);
+
+
+        PyObject *state = PyDict_New();
+
+        PyDict_SetItemString(state, "globals", f_globals);
+        PyDict_SetItemString(state, "defaults", f_defaults);
+        PyDict_SetItemString(state, "closure_values", processed_closure);
+        PyDict_SetItemString(state, "dict", f_dict);
+        PyDict_SetItemString(state, "base_globals", f_module);
+
+        PyDict_SetItemString(state, "name",
+                            ((PyFunctionObject *)obj) -> func_name);
+        Py_INCREF(((PyFunctionObject *)obj) -> func_name);
+
+        PyDict_SetItemString(state, "doc",
+                            ((PyFunctionObject *)obj) -> func_doc);
+        Py_INCREF(((PyFunctionObject *)obj) -> func_doc);
+
+        PyDict_SetItemString(state, "module", PyFunction_GET_MODULE(obj));
+
+        save_global(self, _fill_function_obj, NULL);
+        _Pickler_Write(self, &mark_op, 1);
+        save_global(self, make_skel_func_obj, NULL);
+
+        PyObject *make_skel_func_args = PyTuple_New(2);
+        PyTuple_SetItem(make_skel_func_args, 0, co);
+        PyTuple_SetItem(make_skel_func_args, 1, f_module);
+
+        save_tuple(self, make_skel_func_args);
+        _Pickler_Write(self, &reduce_op, 1);
+
+        save_dict(self, state);
+        _Pickler_Write(self, &tuple_op, 1);
+        _Pickler_Write(self, &reduce_op, 1);
     }
     else {
         save_global(self, obj, NULL);
@@ -7440,6 +7544,42 @@ _pickle_dump_impl(PyObject *module, PyObject *obj, PyObject *file,
     Py_XDECREF(pickler);
     return NULL;
 }
+/*[clinic input]
+_pickle._fill_function
+    func: 'O'
+    state: 'O'
+    /
+fills a function with its state.
+[clinic start generated code]*/
+
+static PyObject *
+_pickle__fill_function_impl(PyObject *module, PyObject *func,
+                            PyObject *state)
+/*[clinic end generated code: output=301f51eca294d882 input=7313f7950f43b7f5]*/
+{
+    if (!PyDict_Check(state)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    PyDict_Update(PyFunction_GetGlobals(func),
+                  PyDict_GetItemString(state, "globals"));
+
+    PyFunction_SetDefaults(func, PyDict_GetItemString(state, "defaults"));
+
+    PyObject_SetAttrString(func, "__name__",
+                           PyDict_GetItemString(state, "name"));
+
+    PyObject_SetAttrString(func, "__dict__",
+                           PyDict_GetItemString(state, "dict"));
+
+    PyFunction_SetClosure(func, PyDict_GetItemString(state, "closure_values"));
+
+    PyObject_SetAttrString(func, "__module__",
+                           PyDict_GetItemString(state, "module"));
+
+    Py_INCREF(func);
+    return func;
+}
 
 /*[clinic input]
 
@@ -7614,6 +7754,8 @@ static struct PyMethodDef pickle_methods[] = {
     _PICKLE_DUMPS_METHODDEF
     _PICKLE_LOAD_METHODDEF
     _PICKLE_LOADS_METHODDEF
+    _PICKLE__FILL_FUNCTION_METHODDEF
+    _PICKLE_MAKE_SKEL_FUNC_METHODDEF
     {NULL, NULL} /* sentinel */
 };
 
