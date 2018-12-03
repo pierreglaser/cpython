@@ -1,8 +1,43 @@
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+VENV="$(basename "${VIRTUAL_ENV}")"
+
+# make sure the correct virtualenv is activated
+if [ "$CURRENT_BRANCH" = "dynamic-func-pickling-pure-python" ] && \
+   [ ! "$VENV" = "pythonic_pickle_python" ]; then
+        echo "invalid virtual env-branch combination:
+            virtual env: ${VIRTUAL_ENV}
+            branch: $CURRENT_BRANCH"
+        return 1
+elif [ "$CURRENT_BRANCH" = "implement-save-function-cpickle" ] && \
+   [ ! "$VENV" = "c_pickle_python" ]; then
+        echo "invalid virtual env-branch combination:
+            virtual env: ${VIRTUAL_ENV}
+            branch: $CURRENT_BRANCH"
+        return 1
+fi
+
+
+
+# remove old bytecodes (pyc files)
+echo "removing old pickle bytecode..."
+PYTHON_REPO="${HOME}"/"${VENV}"
+sudo rm "$PYTHON_REPO/lib/python3.8/__pycache__/pickle.cpython-38.pyc"
+sudo rm "$PYTHON_REPO/lib/python3.8/__pycache__/pickle.cpython-38.opt-2.pyc"
+sudo rm "$PYTHON_REPO/lib/python3.8/__pycache__/pickle.cpython-38.opt-1.pyc"
+
 # use clinc on pickle before compiling
+echo "calling clinic on _pickle.c"
 python3.8 ./Tools/clinic/clinic.py Modules/_pickle.c
 
+echo "re-compiling python"
 # re-compile pickle
-sudo gcc -pthread -fPIC -Wno-unused-result -Wsign-compare -g -O0  -Wall -std=c99 -Wextra -Wno-unused-result -Wno-unused-parameter -Wno-missing-field-initializers -Werror=implicit-function-declaration -I./Include -I/home/pierreglaser/dev_python/include -I. -I/usr/include/x86_64-linux-gnu -I/usr/local/include -I/home/pierreglaser/repos/cpython/Include -I/home/pierreglaser/repos/cpython -c /home/pierreglaser/repos/cpython/Modules/_pickle.c -o build/temp.linux-x86_64-3.8-pydebug/home/pierreglaser/repos/cpython/Modules/_pickle.o
-sudo gcc -pthread -shared build/temp.linux-x86_64-3.8-pydebug/home/pierreglaser/repos/cpython/Modules/_pickle.o -L/home/pierreglaser/dev_python/lib -L/usr/lib/x86_64-linux-gnu -L/usr/local/lib -o build/lib.linux-x86_64-3.8-pydebug/_pickle.cpython-38dm-x86_64-linux-gnu.so
+sudo make
 
-sudo cp build/lib.linux-x86_64-3.8-pydebug/_pickle.cpython-38dm-x86_64-linux-gnu.so /home/pierreglaser/dev_python/lib/python3.8/lib-dynload/
+# install the tests
+echo "installing pickle tests and libraries"
+# make altinstall, but trimmed down to only modified files
+sudo /usr/bin/install -c -m 644 ./Lib/pickle.py "$HOME/dev_python/lib/python3.8"
+sudo /usr/bin/install -c -m 644 ./Lib/pickletools.py "$HOME/dev_python/lib/python3.8"
+sudo /usr/bin/install -c -m 644 ./Lib/test/pickletester.py "$HOME/dev_python/lib/python3.8/test"
+sudo /usr/bin/install -c -m 644 ./Lib/test/test_pickle.py "$HOME/dev_python/lib/python3.8/test"
+
