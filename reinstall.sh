@@ -6,4 +6,3 @@ sudo gcc -pthread -fPIC -Wno-unused-result -Wsign-compare -g -O0  -Wall -std=c99
 sudo gcc -pthread -shared build/temp.linux-x86_64-3.8-pydebug/home/pierreglaser/repos/cpython/Modules/_pickle.o -L/home/pierreglaser/dev_python/lib -L/usr/lib/x86_64-linux-gnu -L/usr/local/lib -o build/lib.linux-x86_64-3.8-pydebug/_pickle.cpython-38dm-x86_64-linux-gnu.so
 
 sudo cp build/lib.linux-x86_64-3.8-pydebug/_pickle.cpython-38dm-x86_64-linux-gnu.so /home/pierreglaser/dev_python/lib/python3.8/lib-dynload/
-
