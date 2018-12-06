@@ -106,4 +106,6 @@ else
 
 fi
 
-
+# re-link virtualenv python with new python
+rm "$VIRTUAL_ENV/bin/python"
+ln -s "$HOME/$VENV/bin/python3.8" "$VIRTUAL_ENV/bin/python"
