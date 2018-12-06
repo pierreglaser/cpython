@@ -71,18 +71,9 @@ DELETE_GLOBAL = opcode.opmap['DELETE_GLOBAL']
 LOAD_GLOBAL = opcode.opmap['LOAD_GLOBAL']
 GLOBAL_OPS = (STORE_GLOBAL, DELETE_GLOBAL, LOAD_GLOBAL)
 
-_BUILTIN_TYPE_NAMES = {
-        types.CodeType: 'CodeType',
-        types.MethodType: 'MethodType'
-        }
-
 def subimport(name):
     __import__(name)
     return sys.modules[name]
-
-
-def _builtin_type(name):
-    return getattr(types, name)
 
 
 def _fill_function(*args):
@@ -1250,9 +1241,6 @@ class _Pickler:
             return self.save_reduce(type, (NotImplemented,), obj=obj)
         elif obj is type(...):
             return self.save_reduce(type, (...,), obj=obj)
-        elif obj in _BUILTIN_TYPE_NAMES:
-            return self.save_reduce(
-                _builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj)
         return self.save_global(obj)
 
     dispatch[type] = save_type
