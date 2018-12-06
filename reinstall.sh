@@ -99,10 +99,10 @@ else
     # install the tests
     echo "installing pickle tests and libraries"
     # make altinstall, but trimmed down to only modified files
-    sudo /usr/bin/install -c -m 644 ./Lib/pickle.py "$HOME/dev_python/lib/python3.8"
-    sudo /usr/bin/install -c -m 644 ./Lib/pickletools.py "$HOME/dev_python/lib/python3.8"
-    sudo /usr/bin/install -c -m 644 ./Lib/test/pickletester.py "$HOME/dev_python/lib/python3.8/test"
-    sudo /usr/bin/install -c -m 644 ./Lib/test/test_pickle.py "$HOME/dev_python/lib/python3.8/test"
+    sudo /usr/bin/install -c -m 644 ./Lib/pickle.py "$HOME/$VENV/lib/python3.8"
+    sudo /usr/bin/install -c -m 644 ./Lib/pickletools.py "$HOME/$VENV/lib/python3.8"
+    sudo /usr/bin/install -c -m 644 ./Lib/test/pickletester.py "$HOME/$VENV/lib/python3.8/test"
+    sudo /usr/bin/install -c -m 644 ./Lib/test/test_pickle.py "$HOME/$VENV/lib/python3.8/test"
 
 fi
 
