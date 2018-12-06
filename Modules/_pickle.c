@@ -3031,8 +3031,8 @@ static int save_code(PicklerObject *self, PyObject *obj){
     PyTuple_SetItem(ret, 10, PyObject_GetAttrString(obj, "co_name"));
     PyTuple_SetItem(ret, 11, PyObject_GetAttrString(obj, "co_firstlineno"));
     PyTuple_SetItem(ret, 12, PyObject_GetAttrString(obj, "co_lnotab"));
-    PyTuple_SetItem(ret, 13, PyObject_GetAttrString(obj, "co_cellvars"));
-    PyTuple_SetItem(ret, 14, PyTuple_New(0));
+    PyTuple_SetItem(ret, 13, PyObject_GetAttrString(obj, "co_freevars"));
+    PyTuple_SetItem(ret, 14, PyObject_GetAttrString(obj, "co_cellvars"));
 
     save(self, ret, 0);
     const char reduce_op = REDUCE;
