@@ -3040,6 +3040,21 @@ static int save_code(PicklerObject *self, PyObject *obj){
     return 0;
 }
 
+static int save_cell(PicklerObject *self, PyObject *obj){
+    PyObject *bltin_module = NULL, *cell_type = NULL;
+    bltin_module = PyImport_ImportModule("builtins");
+    cell_type = PyObject_GetAttrString(bltin_module, "cell");
+    save(self, cell_type, 0);
+
+    PyObject *ret = PyTuple_New(1);
+    PyTuple_SetItem(ret, 0 , PyObject_GetAttrString(obj, "cell_contents"));
+    save(self, ret, 0);
+
+    const char reduce_op = REDUCE;
+    _Pickler_Write(self, &reduce_op, 1);
+    return 0;
+}
+
 static int
 save_dict(PicklerObject *self, PyObject *obj)
 {
@@ -4350,6 +4365,10 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
     }
     else if (type == &PyCode_Type) {
        status = save_code(self, obj);
+       goto done;
+    }
+    else if (type == &PyCell_Type) {
+       status = save_cell(self, obj);
        goto done;
     }
     else if (type == &PyFunction_Type) {
