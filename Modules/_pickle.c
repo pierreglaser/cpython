@@ -1655,26 +1655,13 @@ get_dotted_path(PyObject *obj, PyObject *name)
 {
     _Py_static_string(PyId_dot, ".");
     PyObject *dotted_path;
-    Py_ssize_t i, n;
+    Py_ssize_t n;
 
     dotted_path = PyUnicode_Split(name, _PyUnicode_FromId(&PyId_dot), -1);
     if (dotted_path == NULL)
         return NULL;
     n = PyList_GET_SIZE(dotted_path);
     assert(n >= 1);
-    for (i = 0; i < n; i++) {
-        PyObject *subpath = PyList_GET_ITEM(dotted_path, i);
-        if (_PyUnicode_EqualToASCIIString(subpath, "<locals>")) {
-            if (obj == NULL)
-                PyErr_Format(PyExc_AttributeError,
-                             "Can't pickle local object %R", name);
-            else
-                PyErr_Format(PyExc_AttributeError,
-                             "Can't pickle local attribute %R on %R", name, obj);
-            Py_DECREF(dotted_path);
-            return NULL;
-        }
-    }
     return dotted_path;
 }
 
@@ -4204,8 +4191,16 @@ save_function(PicklerObject *self, PyObject *obj)
 
     if (module_name == NULL)
         goto error;
+    module = PyImport_Import(module_name);
 
-    else if (_PyUnicode_EqualToASCIIString(module_name, "__main__")) {
+    PyObject *lastname = NULL, *cls = NULL, *parent = NULL;
+    lastname = PyList_GET_ITEM(dotted_path, PyList_GET_SIZE(dotted_path)-1);
+    Py_INCREF(lastname);
+    cls = get_deep_attribute(module, dotted_path, &parent);
+    Py_CLEAR(dotted_path);
+
+    if ((_PyUnicode_EqualToASCIIString(module_name, "__main__")) ||
+        ((cls == NULL) || (cls != obj))) {
         PyObject *pickle_module = PyImport_ImportModule("_pickle");
         PyObject *_fill_function_obj, *make_skel_func_obj;
         const char mark_op = MARK;
