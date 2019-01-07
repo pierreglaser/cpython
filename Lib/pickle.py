@@ -1327,7 +1327,7 @@ class _Pickler:
 
 class _Unpickler:
 
-    def __init__(self, file, *, safe=True, fix_imports=True,
+    def __init__(self, file, *, allow_dynamic_objects=False, fix_imports=True,
                  encoding="ASCII", errors="strict"):
         """This takes a binary file for reading a pickle data stream.
 
@@ -1363,7 +1363,7 @@ class _Unpickler:
         self.errors = errors
         self.proto = 0
         self.fix_imports = fix_imports
-        self.safe = safe
+        self.allow_dynamic_objects = allow_dynamic_objects
 
     def load(self):
         """Read a pickled object representation from the open file.
@@ -1738,11 +1738,11 @@ class _Unpickler:
         stack = self.stack
         args = stack.pop()
         func = stack[-1]
-        # prevent make_skel_func from being executed if the _Unpickler's safe
-        # mode is on
-        if self.safe and func is _make_skel_func:
+        # prevent make_skel_func from being executed if the _Unpickler's
+        # allow_dynamic_objects switch is off
+        if not self.allow_dynamic_objects and func is _make_skel_func:
             raise PicklingError(
-                    'Creating new functions is forbidden in safe mode')
+                    'Attempting to load dynamic objects')
         stack[-1] = func(*args)
     dispatch[REDUCE[0]] = load_reduce
 
@@ -1901,18 +1901,20 @@ def _dumps(obj, protocol=None, *, fix_imports=True):
     assert isinstance(res, bytes_types)
     return res
 
-def _load(file, *, safe=True, fix_imports=True, encoding="ASCII",
-          errors="strict"):
-    return _Unpickler(file, safe=safe, fix_imports=fix_imports,
-                     encoding=encoding, errors=errors).load()
+def _load(file, *, allow_dynamic_objects=False, fix_imports=True,
+          encoding="ASCII", errors="strict"):
+    return _Unpickler(file, allow_dynamic_objects=allow_dynamic_objects,
+                      fix_imports=fix_imports, encoding=encoding,
+                      errors=errors).load()
 
-def _loads(s, *, safe=True, fix_imports=True, encoding="ASCII",
-           errors="strict"):
+def _loads(s, *, allow_dynamic_objects=False, fix_imports=True,
+           encoding="ASCII", errors="strict"):
     if isinstance(s, str):
         raise TypeError("Can't load pickle from unicode string")
     file = io.BytesIO(s)
-    return _Unpickler(file, safe=safe, fix_imports=fix_imports,
-                      encoding=encoding, errors=errors).load()
+    return _Unpickler(file, allow_dynamic_objects=allow_dynamic_objects,
+                      fix_imports=fix_imports, encoding=encoding,
+                      errors=errors).load()
 
 # Use the faster _pickle if possible
 try:
