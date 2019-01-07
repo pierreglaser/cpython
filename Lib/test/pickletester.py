@@ -2277,7 +2277,7 @@ class AbstractPickleTests(unittest.TestCase):
             unpickled = self.loads(self.dumps(pickle, proto))
             self.assertIs(pickle, unpickled)
 
-    def test_safe_switch(self):
+    def test_allow_dyanamic_objects_switch(self):
         pickled_func_path = 'pickled_func.pk'
         main_script = """
         import pickle
@@ -2289,19 +2289,21 @@ class AbstractPickleTests(unittest.TestCase):
         with open("{pickled_func_path}", "wb") as f:
             pickle.dump(f0, f)
 
-        # This function should be properly depickled, since safe mode is off
-        depickled_f0 = pickle.loads(pickle.dumps(f0), safe=False)
+        # This function should be properly depickled, since
+        # allow_dynamic_objects switch is on
+        depickled_f0 = pickle.loads(
+            pickle.dumps(f0), allow_dynamic_objects=True)
         assert depickled_f0(5) == f0(5)
 
         with open("{pickled_func_path}", "rb") as f:
-            depickled_f0 = pickle.load(f, safe=False)
+            depickled_f0 = pickle.load(f, allow_dynamic_objects=True)
         assert depickled_f0(5) == f0(5)
 
 
         # Trying to load f0 should raise a PicklingError this time, because
-        # pickle.loads is called with the safe switch on
+        # pickle.loads is called with the allow_dynamic_objects switch off
         try:
-            pickle.loads(pickle.dumps(f0), safe=True)
+            pickle.loads(pickle.dumps(f0), allow_dynamic_objects=False)
         except pickle.PicklingError:
             pass
         else:
@@ -2310,7 +2312,7 @@ class AbstractPickleTests(unittest.TestCase):
 
         try:
             with open("{pickled_func_path}", "rb") as f:
-                func = pickle.load(f, safe=True)
+                func = pickle.load(f,allow_dynamic_objects=False)
         except pickle.PicklingError:
             pass
         else:
@@ -2341,7 +2343,7 @@ class AbstractPickleTests(unittest.TestCase):
 
 
         with open("{pickled_func_path}", "rb") as f:
-            funcs = pickle.load(f, safe=False)
+            funcs = pickle.load(f, allow_dynamic_objects=True)
 
         f_no_module, f_using_a_global, f_needing_subimport, f_with_dict, \
                 f_with_default_kw = funcs
