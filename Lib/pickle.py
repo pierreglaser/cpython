@@ -99,14 +99,14 @@ def _fill_function(*args):
     return func
 
 
-def _make_skel_func(code, base_globals=None):
+def _make_skel_func(code, base_globals=None, closure=None):
     """ Creates a skeleton function object that contains just the provided
         code and the correct number of cells in func_closure.  All other
         func attributes (e.g. func_globals) are empty.
     """
     base_globals = {'__builtins__': __builtins__}
 
-    return types.FunctionType(code, base_globals, None, None, None)
+    return types.FunctionType(code, base_globals, None, None, closure)
 
 
 def _walk_global_ops(code):
@@ -798,10 +798,8 @@ class _Pickler:
         save = self.save
         write = self.write
 
-        code, f_globals, defaults, closure_values, dct, base_globals = self.extract_func_data(func)  # noqa
-        if closure_values is not None:
-            raise AttributeError('cannot pickle a function with a '
-                                 'non-empty closure')
+        func_data = self.extract_func_data(func)
+        code, f_globals, defaults, closure, dct, base_globals = func_data
 
         save(_fill_function)  # skeleton function updater
         write(MARK)    # beginning of tuple that _fill_function expects
@@ -813,6 +811,7 @@ class _Pickler:
         save((
             code,
             base_globals,
+            closure
         ))
         write(REDUCE)
         self.memoize(func)
@@ -822,7 +821,7 @@ class _Pickler:
             'globals': f_globals,
             'defaults': defaults,
             'dict': dct,
-            'closure_values': closure_values,
+            'closure_values': closure,
             'module': func.__module__,
             'name': func.__name__,
             'doc': func.__doc__,
@@ -1288,23 +1287,17 @@ class _Pickler:
             rv = obj.__reduce_ex__(self.proto)
             return self.save_reduce(obj=obj, *rv)
 
-        if lookedup_by_name is not obj:
-            # If obj is not available from its module, it means it is nested.
-            # obj's closure may be not empty, and as pickling closures is not
-            # currently supported, an attribute error is raised.
-            raise AttributeError
+        if lookedup_by_name is not obj or modname == '__main__':
+            # functions defined in the __main__ modules are not picklable
+            # using the simple attribute path to the function.
+            # (module.submodule.[...].function). Instead, all the elements
+            # necessary to recreate the function from scratch (code, global
+            # variables etc.) are serialized.
+            self.save_function_tuple(obj)
+            return
         else:
-            if modname != '__main__':
-                self.modules.add(themodule)
-                return self.save_global(obj, name)
-            else:
-                # functions defined in the __main__ modules are not pickle
-                # using the simple attribute path to the function.
-                # (module.submodule.[...].function). Instead, all the elements
-                # necessary to recreate the function from scratch (code, global
-                # variables etc.) are serialized.
-                self.save_function_tuple(obj)
-                return
+            self.modules.add(themodule)
+            return self.save_global(obj, name)
 
     dispatch[types.FunctionType] = save_function
 
@@ -1321,6 +1314,15 @@ class _Pickler:
         self.save_reduce(types.CodeType, args, obj=obj)
 
     dispatch[types.CodeType] = save_codeobject
+
+    def save_cell(self, obj):
+        """
+        Save a cell object
+        """
+        args = (obj.cell_contents, )
+        self.save_reduce(cell, args, obj=obj)
+
+    dispatch[cell] = save_cell
 
 
 # Unpickling machinery
