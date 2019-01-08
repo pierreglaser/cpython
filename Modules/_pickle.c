@@ -3045,6 +3045,24 @@ static int save_cell(PicklerObject *self, PyObject *obj){
     return 0;
 }
 
+static int save_module(PicklerObject *self, PyObject *obj){
+
+    PyObject *builtins, *import_function, *ret = NULL;
+
+    builtins = PyEval_GetBuiltins();
+    import_function = PyDict_GetItemString(builtins, "__import__");
+
+    save(self, import_function, 0);
+
+    ret = PyTuple_New(1);
+    PyTuple_SetItem(ret, 0 , PyObject_GetAttrString(obj, "__name__"));
+    save(self, ret, 0);
+
+    const char reduce_op = REDUCE;
+    _Pickler_Write(self, &reduce_op, 1);
+    return 0;
+}
+
 static int
 save_dict(PicklerObject *self, PyObject *obj)
 {
@@ -4369,6 +4387,12 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
        status = save_cell(self, obj);
        goto done;
     }
+    else if (type == &PyModule_Type) {
+       status = save_module(self, obj);
+       goto done;
+
+    }
+
     else if (type == &PyFunction_Type) {
         status = save_function(self, obj);
         goto done;
