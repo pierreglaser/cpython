@@ -1,5 +1,5 @@
 set breakpoint pending on
 dir ~/repos/cpython
-break save_function
-break Modules/_pickle.c:4180
-run -m pdb test_cell.py
+break Modules/_pickle.c:6668
+break Modules/_pickle.c:7157
+run -m pdb ../../test_closure.py

@@ -8,7 +8,6 @@ echo "verifying the Makefile options..."
 if [ ! -f ./Makefile ]; then
     echo "No Makefile generated"
     FULL_REINSTALL=1
-
 else
     INSTALL_FOLDER="$(grep -e "^prefix=" Makefile | awk '{print $NF}')"
     INSTALL_PREFIX="$(basename "${INSTALL_FOLDER}")"
@@ -29,27 +28,32 @@ else
             FULL_REINSTALL=1
     fi
 
-    echo "...done"
-
-
-    # make sure the correct virtualenv is activated
-    echo "checking virtualenv options..."
-    if [ "$CURRENT_BRANCH" = "dynamic-func-pickling-pure-python" ] && \
-       [ ! "$VENV" = "pythonic_pickle_python" ]; then
-            echo "Warning: invalid virtual env-branch combination:
-                virtual env: ${VIRTUAL_ENV}
-                branch: $CURRENT_BRANCH"
-            return 1
-    elif [ "$CURRENT_BRANCH" = "implement-save-function-cpickle" ] && \
-       [ ! "$VENV" = "c_pickle_python" ]; then
-            echo "Warning invalid virtual env-branch combination:
-                virtual env: ${VIRTUAL_ENV}
-                branch: $CURRENT_BRANCH"
-            return 1
-    else
-        echo "...done"
-    fi
 fi
+
+echo "...done"
+
+
+# make sure the correct virtualenv is activated
+echo "checking virtualenv options..."
+if [ "$CURRENT_BRANCH" = "dynamic-func-pickling-pure-python" ] && \
+   [ ! "$VENV" = "pythonic_pickle_python" ]; then
+        echo "Warning: invalid virtual env-branch combination:
+            virtual env: ${VIRTUAL_ENV}
+            branch: $CURRENT_BRANCH"
+        return 1
+elif [ "$CURRENT_BRANCH" = "implement-save-function-cpickle" ] && \
+   [ ! "$VENV" = "c_pickle_python" ]; then
+        echo "Warning invalid virtual env-branch combination:
+            virtual env: ${VIRTUAL_ENV}
+            branch: $CURRENT_BRANCH"
+        return 1
+else
+    echo "...done"
+fi
+
+# exit current virtualenv
+deactivate
+
 
 if [ "$FULL_REINSTALL" = 1 ]; then
     read -p "A full reinstall is necessary. Do you want to do it (y/n)?" -r
@@ -59,10 +63,15 @@ if [ "$FULL_REINSTALL" = 1 ]; then
 
         sudo git clean -xdf
         if [ "$CURRENT_BRANCH" = "implement-save-function-cpickle" ]; then
-            sudo ./configure --prefix="$HOME/c_pickle_python" --with-pydebug
+            PREFIX=$HOME/c_pickle_python
         elif [ "$CURRENT_BRANCH" = "dynamic-func-pickling-pure-python" ]; then
-            sudo ./configure --prefix="$HOME/pythonic_pickle_python" --with-pydebug
+            PREFIX=$HOME/pythonic_pickle_python
+        else
+            echo "unknown branch: $CURRENT_BRANCH. exiting the script"
+            return 1
         fi
+
+        sudo ./configure --prefix="$PREFIX" --with-pydebug
         sudo make && sudo make altinstall
 
     else
@@ -77,6 +86,9 @@ else
     echo "removing old pickle bytecode..."
     PYTHON_REPO="${HOME}"/"${VENV}"
     # from inside the cpython repo
+    # bash exits with 1 if not found, -> unable to use the errexit option
+    # without crashing the bash session. Better check if file exists using
+    # either -f or find
     sudo rm "./build/lib.linux-x86_64-3.8-pydebug/_pickle.cpython-38dm-x86_64-linux-gnu.so"
     sudo rm "./build/temp.linux-x86_64-3.8-pydebug$HOME/repos/cpython/Modules/_pickle.o"
     sudo rm "./Lib/__pycache__/pickle.cpython-38.pyc"
@@ -99,11 +111,17 @@ else
     # install the tests
     echo "installing pickle tests and libraries"
     # make altinstall, but trimmed down to only modified files
-    sudo /usr/bin/install -c -m 644 ./Lib/pickle.py "$HOME/dev_python/lib/python3.8"
-    sudo /usr/bin/install -c -m 644 ./Lib/pickletools.py "$HOME/dev_python/lib/python3.8"
-    sudo /usr/bin/install -c -m 644 ./Lib/test/pickletester.py "$HOME/dev_python/lib/python3.8/test"
-    sudo /usr/bin/install -c -m 644 ./Lib/test/test_pickle.py "$HOME/dev_python/lib/python3.8/test"
+    sudo /usr/bin/install -c -m 644 ./Lib/pickle.py "$HOME/$VENV/lib/python3.8"
+    sudo /usr/bin/install -c -m 644 ./Lib/pickletools.py "$HOME/$VENV/lib/python3.8"
+    sudo /usr/bin/install -c -m 644 ./Lib/test/pickletester.py "$HOME/$VENV/lib/python3.8/test"
+    sudo /usr/bin/install -c -m 644 ./Lib/test/test_pickle.py "$HOME/$VENV/lib/python3.8/test"
 
 fi
 
-
+# re-create a clean virtualenv. This is done because the python executables are
+# not updated in the virtualenv.
+PYTHON="$HOME/$VENV/bin/python3.8"
+rmvirtualenv "$VENV"
+mkvirtualenv "$VENV" --python="$PYTHON"
+setvirtualenvproject "$VIRTUAL_ENV" "$HOME/repos/cpython"
+python -mpip install coverage
