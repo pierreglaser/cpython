@@ -4,7 +4,7 @@ OLD_VIRTUALENV=${VIRTUAL_ENV}
 CPYTHON_COV_HOME=$HOME/repos/cpython_coverage
 COVERAGE_PROCESS_START=$HOME/repos/cpython/.coveragerc
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-PYTHON=python
+PYTHON=python3.8
 HTML_DIR="$CPYTHON_COV_HOME"/"$CURRENT_BRANCH"
 
 if [ "$CURRENT_BRANCH" = "dynamic-func-pickling-pure-python" ]; then
@@ -25,11 +25,7 @@ fi
 
 $PYTHON install_coverage_subprocess_pth.py
 
-if [ "$FULL" = 1 ]; then
-    COVERAGE_PROCESS_START=${COVERAGE_PROCESS_START} $PYTHON -mcoverage run Lib/test/regrtest.py test_pickle -v
-else
-    COVERAGE_PROCESS_START=${COVERAGE_PROCESS_START} $PYTHON -mcoverage run Lib/test/regrtest.py test_pickle -v -m test_method_in_main
-fi
+COVERAGE_PROCESS_START=${COVERAGE_PROCESS_START} $PYTHON -mcoverage run Lib/test/regrtest.py test_pickle -v -m test_method_in_main
 
 
 $PYTHON remove_coverage_pth_code.py
