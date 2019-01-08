@@ -2346,7 +2346,7 @@ class AbstractPickleTests(unittest.TestCase):
             funcs = pickle.load(f, allow_dynamic_objects=True)
 
         f_no_module, f_using_a_global, f_needing_subimport, f_with_dict, \
-                f_with_default_kw = funcs
+                f_with_default_kw, nested_function = funcs
 
         assert f_no_module(2) == 4
 
@@ -2363,6 +2363,8 @@ class AbstractPickleTests(unittest.TestCase):
         assert f_with_default_kw() == 2
         assert f_with_default_kw(1) == 1
         assert f_with_default_kw.__defaults__ == (2, )
+
+        assert nested_function() == 1
 
 
         '''""".format(pickled_func_path=pickled_func_path)
@@ -2417,53 +2419,19 @@ class AbstractPickleTests(unittest.TestCase):
         def f_with_default_kw(x=2):
             return x
 
-        with open("{pickled_func_path}", "wb") as f:
-            pickle.dump([f_no_module, f_using_a_global,f_needing_subimport,
-                         f_with_dict, f_with_default_kw], f)
-
-        # pickling a function with a non empty closure should fail for now
-        def wrapper_function():
+        # nested function with a non empty closure
+        def nested_function_factory():
             variable_in_closure = 1
             def nested_function():
                 nonlocal variable_in_closure
                 return variable_in_closure
             return nested_function
 
-        wrapped_function = wrapper_function()
+        nested_function = nested_function_factory()
 
-        try:
-            pickle.dumps(wrapped_function)
-        except Exception as e:
-            if not isinstance(e, AttributeError):
-                raise AssertionError(
-                    "pickling a nested function with a non empty "
-                    "closure did not raise an AttributeError")
-
-        else:
-            raise AssertionError(
-                "pickling a nested function with a non empty "
-                "closure did not raise an AttributeError")
-
-        # trying to call save_function_tuple directly should also fail with a
-        # non-empty closure
-        import io
-        bytes_stream = io.BytesIO()
-        from pickle import _Pickler
-        try:
-            _Pickler(bytes_stream).save_function_tuple(wrapped_function)
-        except Exception as e:
-            if not isinstance(e, AttributeError):
-                raise AssertionError(
-                    "pickling a nested function with a non empty "
-                    "closure did not raise an AttributeError")
-        else:
-            raise AssertionError(
-                "pickling a nested function with a non empty "
-                "closure did not raise an AttributeError")
-
-
-
-
+        with open("{pickled_func_path}", "wb") as f:
+            pickle.dump([f_no_module, f_using_a_global,f_needing_subimport,
+                         f_with_dict, f_with_default_kw, nested_function], f)
 
         assert_python_ok("-c", {main_subprocess_script})
 
