@@ -6695,7 +6695,7 @@ load_reduce(UnpicklerObject *self)
         return -1;
     PDATA_POP(self->stack, callable);
     if (callable) {
-        if (~self->allow_dynamic_objects &&
+        if (!self->allow_dynamic_objects &&
             callable == make_skel_func_obj){
             PyErr_SetString(st->UnpicklingError,
                             "Attempting to load dynamic objects");
