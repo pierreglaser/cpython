@@ -682,6 +682,9 @@ typedef struct UnpicklerObject {
     int proto;                  /* Protocol of the pickle loaded. */
     int fix_imports;            /* Indicate whether Unpickler should fix
                                    the name of globals pickled by Python 2.x. */
+    int allow_dynamic_objects;  /* Switch allowing to load pickle strings
+                                   containing instructions to create new
+                                   functions and/or classes  */
 } UnpicklerObject;
 
 typedef struct {
@@ -6656,13 +6659,26 @@ load_reduce(UnpicklerObject *self)
     PyObject *callable = NULL;
     PyObject *argtup = NULL;
     PyObject *obj = NULL;
+    PyObject *pickle_module = NULL, *make_skel_func_obj = NULL;
+    PickleState *st = _Pickle_GetGlobalState();
+
+    pickle_module = PyImport_ImportModule("_pickle");
+    make_skel_func_obj = PyObject_GetAttrString(pickle_module,
+                                                "make_skel_func");
 
     PDATA_POP(self->stack, argtup);
     if (argtup == NULL)
         return -1;
     PDATA_POP(self->stack, callable);
     if (callable) {
-        obj = PyObject_CallObject(callable, argtup);
+        if (~self->allow_dynamic_objects &&
+            callable == make_skel_func_obj){
+            PyErr_SetString(st->UnpicklingError,
+                            "Attempting to load dynamic objects");
+        }
+        else{
+            obj = PyObject_CallObject(callable, argtup);
+        }
         Py_DECREF(callable);
     }
     Py_DECREF(argtup);
@@ -7083,6 +7099,7 @@ _pickle.Unpickler.__init__
   fix_imports: bool = True
   encoding: str = 'ASCII'
   errors: str = 'strict'
+  allow_dynamic_objects: bool = False
 
 This takes a binary file for reading a pickle data stream.
 
@@ -7109,8 +7126,9 @@ string instances as bytes objects.
 static int
 _pickle_Unpickler___init___impl(UnpicklerObject *self, PyObject *file,
                                 int fix_imports, const char *encoding,
-                                const char *errors)
-/*[clinic end generated code: output=e2c8ce748edc57b0 input=f9b7da04f5f4f335]*/
+                                const char *errors,
+                                int allow_dynamic_objects)
+/*[clinic end generated code: output=af1f93e0b4864246 input=191060f51124c484]*/
 {
     _Py_IDENTIFIER(persistent_load);
 
@@ -7142,6 +7160,8 @@ _pickle_Unpickler___init___impl(UnpicklerObject *self, PyObject *file,
         return -1;
 
     self->proto = 0;
+
+    self->allow_dynamic_objects = allow_dynamic_objects;
 
     return 0;
 }
@@ -7655,6 +7675,7 @@ _pickle.load
   fix_imports: bool = True
   encoding: str = 'ASCII'
   errors: str = 'strict'
+  allow_dynamic_objects: bool = False
 
 Read and return an object from the pickle data stored in a file.
 
@@ -7683,8 +7704,9 @@ string instances as bytes objects.
 
 static PyObject *
 _pickle_load_impl(PyObject *module, PyObject *file, int fix_imports,
-                  const char *encoding, const char *errors)
-/*[clinic end generated code: output=69e298160285199e input=01b44dd3fc07afa7]*/
+                  const char *encoding, const char *errors,
+                  int allow_dynamic_objects)
+/*[clinic end generated code: output=8a9236ea46d0ae36 input=01a230a94ec309c5]*/
 {
     PyObject *result;
     UnpicklerObject *unpickler = _Unpickler_New();
@@ -7699,6 +7721,8 @@ _pickle_load_impl(PyObject *module, PyObject *file, int fix_imports,
         goto error;
 
     unpickler->fix_imports = fix_imports;
+
+    unpickler->allow_dynamic_objects = allow_dynamic_objects;
 
     result = load(unpickler);
     Py_DECREF(unpickler);
@@ -7718,6 +7742,7 @@ _pickle.loads
   fix_imports: bool = True
   encoding: str = 'ASCII'
   errors: str = 'strict'
+  allow_dynamic_objects: bool = False
 
 Read and return an object from the given pickle data.
 
@@ -7737,8 +7762,9 @@ string instances as bytes objects.
 
 static PyObject *
 _pickle_loads_impl(PyObject *module, PyObject *data, int fix_imports,
-                   const char *encoding, const char *errors)
-/*[clinic end generated code: output=1e7cb2343f2c440f input=70605948a719feb9]*/
+                   const char *encoding, const char *errors,
+                   int allow_dynamic_objects)
+/*[clinic end generated code: output=1a19635917915744 input=c1b72bc8a82f7869]*/
 {
     PyObject *result;
     UnpicklerObject *unpickler = _Unpickler_New();
@@ -7753,6 +7779,8 @@ _pickle_loads_impl(PyObject *module, PyObject *data, int fix_imports,
         goto error;
 
     unpickler->fix_imports = fix_imports;
+
+    unpickler->allow_dynamic_objects = allow_dynamic_objects;
 
     result = load(unpickler);
     Py_DECREF(unpickler);
