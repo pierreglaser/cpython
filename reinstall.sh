@@ -33,24 +33,6 @@ fi
 echo "...done"
 
 
-# make sure the correct virtualenv is activated
-echo "checking virtualenv options..."
-if [ "$CURRENT_BRANCH" = "dynamic-func-pickling-pure-python" ] && \
-   [ ! "$VENV" = "pythonic_pickle_python" ]; then
-        echo "Warning: invalid virtual env-branch combination:
-            virtual env: ${VIRTUAL_ENV}
-            branch: $CURRENT_BRANCH"
-        return 1
-elif [ "$CURRENT_BRANCH" = "implement-save-function-cpickle" ] && \
-   [ ! "$VENV" = "c_pickle_python" ]; then
-        echo "Warning invalid virtual env-branch combination:
-            virtual env: ${VIRTUAL_ENV}
-            branch: $CURRENT_BRANCH"
-        return 1
-else
-    echo "...done"
-fi
-
 # exit current virtualenv
 deactivate
 
