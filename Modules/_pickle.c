@@ -4281,14 +4281,20 @@ extract_func_data(PicklerObject *self, PyObject *obj)
 static int 
 save_function(PicklerObject *self, PyObject *obj)
 {
-    PyObject *module = NULL;
+    PyObject *module = NULL, *modules = NULL, *main_module = NULL;
     PyObject *module_name = NULL;
     PyObject *global_name = NULL;
     PyObject *dotted_path = NULL;
     int status = 0;
+    int defined_in_main = 1;
 
     _Py_IDENTIFIER(__name__);
     _Py_IDENTIFIER(__qualname__);
+
+    _Py_IDENTIFIER(modules);
+
+    modules = _PySys_GetObjectId(&PyId_modules);
+    main_module = PyDict_GetItemString(modules, "__main__");
 
     if (_PyObject_LookupAttrId(obj, &PyId___qualname__, &global_name) < 0)
         goto error;
@@ -4301,20 +4307,34 @@ save_function(PicklerObject *self, PyObject *obj)
     dotted_path = get_dotted_path(module, global_name);
     if (dotted_path == NULL)
         goto error;
-    module_name = whichmodule(obj, dotted_path);
 
-    if (module_name == NULL)
-        goto error;
-    module = PyImport_Import(module_name);
+    /* look first for obj in the __main__ module before searching in other
+     * modules, to avoid being fooled by potential references to __main__ in
+     * sys.modules (for example, __mp_main__) */
 
     PyObject *lastname = NULL, *cls = NULL, *parent = NULL;
+
     lastname = PyList_GET_ITEM(dotted_path, PyList_GET_SIZE(dotted_path)-1);
     Py_INCREF(lastname);
-    cls = get_deep_attribute(module, dotted_path, &parent);
+
+    cls = get_deep_attribute(main_module, dotted_path, &parent);
+
+    if  (cls != obj){
+        module_name = whichmodule(obj, dotted_path);
+
+        if (module_name == NULL)
+            goto error;
+
+        module = PyImport_Import(module_name);
+
+        cls = get_deep_attribute(module, dotted_path, &parent);
+        defined_in_main = _PyUnicode_EqualToASCIIString(module_name,
+                                                        "__main__");
+    }
+
     Py_CLEAR(dotted_path);
 
-    if ((_PyUnicode_EqualToASCIIString(module_name, "__main__")) ||
-        ((cls == NULL) || (cls != obj))) {
+    if (defined_in_main || ((cls == NULL) || (cls != obj))) {
         PyObject *pickle_module = PyImport_ImportModule("_pickle");
         PyObject *_fill_function_obj, *make_skel_func_obj;
         const char mark_op = MARK;
