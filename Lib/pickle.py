@@ -472,8 +472,6 @@ class _Pickler:
         self.fast = 0
         self.fix_imports = fix_imports and protocol < 3
 
-        # set of modules to unpickle
-        self.modules = set()
         # map ids to dictionary. used to ensure that functions can share global
         # env
         self.globals_ref = {}
@@ -731,7 +729,6 @@ class _Pickler:
         """
         Save a module as an import
         """
-        self.modules.add(obj)
         self.save_reduce(subimport, (obj.__name__,), obj=obj)
 
     dispatch[types.ModuleType] = save_module
@@ -1296,7 +1293,6 @@ class _Pickler:
             self.save_function_tuple(obj)
             return
         else:
-            self.modules.add(themodule)
             return self.save_global(obj, name)
 
     dispatch[types.FunctionType] = save_function
