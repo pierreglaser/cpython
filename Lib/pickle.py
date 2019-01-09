@@ -71,10 +71,6 @@ DELETE_GLOBAL = opcode.opmap['DELETE_GLOBAL']
 LOAD_GLOBAL = opcode.opmap['LOAD_GLOBAL']
 GLOBAL_OPS = (STORE_GLOBAL, DELETE_GLOBAL, LOAD_GLOBAL)
 
-def subimport(name):
-    __import__(name)
-    return sys.modules[name]
-
 
 def _fill_function(*args):
     """Fill a skeleton function object with the restt of the function's data
@@ -729,7 +725,7 @@ class _Pickler:
         """
         Save a module as an import
         """
-        self.save_reduce(subimport, (obj.__name__,), obj=obj)
+        self.save_reduce(__import__, (obj.__name__,), obj=obj)
 
     dispatch[types.ModuleType] = save_module
 
