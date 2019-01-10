@@ -4,18 +4,15 @@ import dbm
 import io
 import functools
 import os
-import os.path as op
 import pickle
 import pickletools
 import struct
 import sys
 import unittest
-import tempfile
 import textwrap
 import weakref
 from http.cookies import SimpleCookie
 
-from subprocess import Popen, check_output, PIPE, STDOUT, CalledProcessError
 from test import support
 from test.support.script_helper import assert_python_ok
 from test.support import (
