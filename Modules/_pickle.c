@@ -7,6 +7,7 @@
 
 #include "Python.h"
 #include "structmember.h"
+#include "opcode.h"
 
 PyDoc_STRVAR(pickle_module_doc,
 "Optimized C implementation for the Python pickle module.");
@@ -681,6 +682,9 @@ typedef struct UnpicklerObject {
     int proto;                  /* Protocol of the pickle loaded. */
     int fix_imports;            /* Indicate whether Unpickler should fix
                                    the name of globals pickled by Python 2.x. */
+    int allow_dynamic_objects;  /* Switch allowing to load pickle strings
+                                   containing instructions to create new
+                                   functions and/or classes  */
 } UnpicklerObject;
 
 typedef struct {
@@ -1654,26 +1658,13 @@ get_dotted_path(PyObject *obj, PyObject *name)
 {
     _Py_static_string(PyId_dot, ".");
     PyObject *dotted_path;
-    Py_ssize_t i, n;
+    Py_ssize_t n;
 
     dotted_path = PyUnicode_Split(name, _PyUnicode_FromId(&PyId_dot), -1);
     if (dotted_path == NULL)
         return NULL;
     n = PyList_GET_SIZE(dotted_path);
     assert(n >= 1);
-    for (i = 0; i < n; i++) {
-        PyObject *subpath = PyList_GET_ITEM(dotted_path, i);
-        if (_PyUnicode_EqualToASCIIString(subpath, "<locals>")) {
-            if (obj == NULL)
-                PyErr_Format(PyExc_AttributeError,
-                             "Can't pickle local object %R", name);
-            else
-                PyErr_Format(PyExc_AttributeError,
-                             "Can't pickle local attribute %R on %R", name, obj);
-            Py_DECREF(dotted_path);
-            return NULL;
-        }
-    }
     return dotted_path;
 }
 
@@ -3010,6 +3001,162 @@ batch_dict_exact(PicklerObject *self, PyObject *obj)
     return 0;
 }
 
+static int save_code(PicklerObject *self, PyObject *obj){
+    PyObject *type_module = NULL, *code_type = NULL;
+    type_module = PyImport_ImportModule("types");
+    code_type = PyObject_GetAttrString(type_module, "CodeType");
+    save(self, code_type, 0);
+    PyObject *ret = PyTuple_New(15);
+
+    PyTuple_SetItem(ret, 0 , PyObject_GetAttrString(obj, "co_argcount"));
+    PyTuple_SetItem(ret, 1 , PyObject_GetAttrString(obj, "co_kwonlyargcount"));
+    PyTuple_SetItem(ret, 2 , PyObject_GetAttrString(obj, "co_nlocals"));
+    PyTuple_SetItem(ret, 3 , PyObject_GetAttrString(obj, "co_stacksize"));
+    PyTuple_SetItem(ret, 4 , PyObject_GetAttrString(obj, "co_flags"));
+    PyTuple_SetItem(ret, 5 , PyObject_GetAttrString(obj, "co_code"));
+    PyTuple_SetItem(ret, 6 , PyObject_GetAttrString(obj, "co_consts"));
+    PyTuple_SetItem(ret, 7 , PyObject_GetAttrString(obj, "co_names"));
+    PyTuple_SetItem(ret, 8 , PyObject_GetAttrString(obj, "co_varnames"));
+    PyTuple_SetItem(ret, 9,  PyObject_GetAttrString(obj, "co_filename"));
+    PyTuple_SetItem(ret, 10, PyObject_GetAttrString(obj, "co_name"));
+    PyTuple_SetItem(ret, 11, PyObject_GetAttrString(obj, "co_firstlineno"));
+    PyTuple_SetItem(ret, 12, PyObject_GetAttrString(obj, "co_lnotab"));
+    PyTuple_SetItem(ret, 13, PyObject_GetAttrString(obj, "co_freevars"));
+    PyTuple_SetItem(ret, 14, PyObject_GetAttrString(obj, "co_cellvars"));
+
+    save(self, ret, 0);
+    const char reduce_op = REDUCE;
+    _Pickler_Write(self, &reduce_op, 1);
+    return 0;
+}
+
+static int save_cell(PicklerObject *self, PyObject *obj){
+    PyObject *bltin_module = NULL, *cell_type = NULL;
+    bltin_module = PyImport_ImportModule("builtins");
+    cell_type = PyObject_GetAttrString(bltin_module, "cell");
+    save(self, cell_type, 0);
+
+    PyObject *ret = PyTuple_New(1);
+    PyTuple_SetItem(ret, 0 , PyObject_GetAttrString(obj, "cell_contents"));
+    save(self, ret, 0);
+
+    const char reduce_op = REDUCE;
+    _Pickler_Write(self, &reduce_op, 1);
+    return 0;
+}
+
+static int save_module(PicklerObject *self, PyObject *obj){
+
+    PyObject *builtins, *import_function, *ret = NULL;
+
+    builtins = PyEval_GetBuiltins();
+    import_function = PyDict_GetItemString(builtins, "__import__");
+
+    save(self, import_function, 0);
+
+    ret = PyTuple_New(1);
+    PyTuple_SetItem(ret, 0 , PyObject_GetAttrString(obj, "__name__"));
+    save(self, ret, 0);
+
+    const char reduce_op = REDUCE;
+    _Pickler_Write(self, &reduce_op, 1);
+    return 0;
+}
+
+/* Save submodules used by a function but not listed in its globals.
+ * When a function uses some package's submodule, the global variables
+ * extracted in extract_func_globals contain the package, but not the
+ * submodule. Thus, at depickling time, only the top-level package will be
+ * loaded. If the submodule is not imported automatically in the __init__.py of
+ * its parent package, running the loaded function may raise an AttributeError.
+ * For this reason, this function looks for currently loaded submodules
+ * (modules present in sys.modules) that are also used by the function, and
+ * saves them.*/
+static int
+save_subimports(PicklerObject *self, PyObject *code,
+                PyObject *top_level_dependencies)
+{
+    PyObject *sys_modules_names, *modules, *dependencies_iter = NULL;
+    PyObject *sys_modules_iter, *co_names, *package_name = NULL;
+    PyObject *tokens = NULL;
+
+    const char pop_op = POP;
+
+    _Py_IDENTIFIER(modules);
+    _Py_static_string(PyId_dot, ".");
+    modules = _PySys_GetObjectId(&PyId_modules);
+
+    /* A concurrent thread could mutate sys.modules. make sure we iterate over
+     * a copy to avoid exceptions */
+    sys_modules_names = PySequence_List(modules);
+
+    dependencies_iter = PyObject_GetIter(top_level_dependencies);
+    sys_modules_iter = PyObject_GetIter(sys_modules_names);
+
+    co_names = PySet_New(PyObject_GetAttrString(code, "co_names"));
+
+    for (;;) {
+        PyObject *item;
+        item = PyIter_Next(dependencies_iter);
+
+        if (item == NULL) {
+            if (PyErr_Occurred()) {
+                Py_DECREF(dependencies_iter);
+                return -1;
+            }
+            break;
+        }
+
+        /* check if any known dependency is an imported package */
+        if (PyModule_Check(item) &&
+            PyObject_HasAttrString(item, "__package__")){
+            if (!(PyObject_GetAttrString(item, "__package__") == Py_None)){
+                package_name = PyObject_GetAttrString(item, "__name__");
+                for (;;) {
+                    PyObject *module;
+                    module = PyIter_Next(sys_modules_iter);
+                    if (module == NULL) {
+                        if (PyErr_Occurred()) {
+                            Py_DECREF(sys_modules_iter);
+                            return -1;
+                        }
+                        break;
+                    }
+                    /* represents the splitted dotted path of module */
+                    tokens = PyUnicode_Split(module,
+                                             _PyUnicode_FromId(&PyId_dot),
+                                             -1);
+
+                    /* check if this module is a submodule with item as a
+                     * parent package */
+                    if (!PyUnicode_Compare(PyList_GetItem(tokens, 0),
+                                           package_name) &&
+                        PyList_Size(tokens) > 1){
+                        tokens = PyList_GetSlice(tokens,
+                                                 1, PyList_GET_SIZE(tokens));
+
+                        tokens = PySet_New(tokens);
+
+                        PyObject *diff = NULL;
+                        diff = tokens->ob_type->tp_as_number->nb_subtract(
+                            tokens, co_names);
+
+                        if (PySet_Size(diff) == 0){
+
+                            save_module(self, PyDict_GetItem(modules,
+                                                             module));
+                            _Pickler_Write(self, &pop_op, 1);
+
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+
 static int
 save_dict(PicklerObject *self, PyObject *obj)
 {
@@ -3933,6 +4080,332 @@ save_reduce(PicklerObject *self, PyObject *args, PyObject *obj)
     return 0;
 }
 
+static int fill_globals(PyObject *co, PyObject **val){
+    PyObject *co_code, *co_names, *co_consts;
+    PyObject *op, *seq;
+    PyObject *global_var_names;
+
+    global_var_names = PyList_New(0);
+    Py_ssize_t oparg;
+    int i, len, first_arg_byte;
+    int extended_arg = 0;
+
+    co_code = ((PyCodeObject *)co)->co_code;
+    co_names = ((PyCodeObject *)co)->co_names;
+    co_consts = ((PyCodeObject *)co)->co_consts;
+
+    Py_INCREF(co_code);
+    Py_INCREF(co_names);
+    Py_INCREF(co_consts);
+
+    seq = PySequence_Fast(co_code, "expected a sequence");
+    len = PySequence_Size(co_code);
+
+    i = 0;
+    while(i < len){
+        op = PySequence_Fast_GET_ITEM(seq, i);
+        if (HAS_ARG(PyLong_AS_LONG(op))){
+            first_arg_byte = PyLong_AS_LONG(PySequence_Fast_GET_ITEM(seq, i+1));
+
+
+            extended_arg = 0;
+            oparg = first_arg_byte | extended_arg;
+
+            if (PyLong_AS_LONG(op) == EXTENDED_ARG){
+                extended_arg = oparg << 8;
+            }
+            if (PyLong_AS_LONG(op) == STORE_GLOBAL ||
+                PyLong_AS_LONG(op) == DELETE_GLOBAL ||
+                PyLong_AS_LONG(op) == LOAD_GLOBAL){
+
+
+                PyObject *name = PyTuple_GetItem(co_names, oparg);
+                PyList_Append(global_var_names,
+                              name);
+                /* Py_INCREF(global_var_names); */
+            }
+        }
+        i+=2;
+    }
+    if (co_consts != Py_None){
+        PyObject *const_seq = PySequence_Fast(
+                co_consts, "expected a sequence");
+        Py_ssize_t consts_len = PySequence_Size(co_consts);
+        int j = 0;
+        PyObject *next_const;
+        while (j < consts_len){
+            next_const = PySequence_Fast_GET_ITEM(const_seq, j);
+            if (Py_TYPE(next_const) == &PyCode_Type){
+            /* TODO: this will not work, i need to append to the current
+             * val and not override. I need to write a test to
+             * make sure that works. */
+                PyObject *globals_from_nested_funcs = PyList_New(0);
+                fill_globals(next_const, &globals_from_nested_funcs);
+                _PyList_Extend((PyListObject *)global_var_names,
+                               globals_from_nested_funcs);
+            }
+            j++;
+
+        }
+    }
+
+    *val = global_var_names;
+    return 1;
+}
+
+/*[clinic input]
+_pickle.make_skel_func
+
+  code: object
+  base_globals: object
+  /
+
+Creates a skeleton function object.
+
+This skeleton contains just the provided code and the correct number of cells
+in func_closure.  All other func attributes (e.g. func_globals) are empty.
+[clinic start generated code]*/
+
+static PyObject *
+_pickle_make_skel_func_impl(PyObject *module, PyObject *code,
+                            PyObject *base_globals)
+/*[clinic end generated code: output=8671cb7220fc8cd5 input=241e46d9fbaa89f0]*/
+
+{
+    PyFunctionObject *newfunc = NULL;
+    PyObject *f_base_module, *func_global_namespace = NULL;
+
+    if (base_globals == Py_None){
+        func_global_namespace = PyDict_New();
+    }
+
+    else if PyUnicode_Check(base_globals){
+        f_base_module = PyImport_ImportModule(
+                PyUnicode_AsUTF8(base_globals));
+
+        if (f_base_module == NULL){
+            func_global_namespace = PyDict_New();
+            PyErr_Format(PyExc_RuntimeError,
+                         "module %s was not found", base_globals);
+            return NULL;
+        }
+        else {
+            func_global_namespace = PyModule_GetDict(f_base_module);
+        }
+        /* TODO implement dynamic module cache?*/
+    }
+    PyDict_SetItem(func_global_namespace, PyUnicode_FromString("__builtins__"),
+                   PyEval_GetBuiltins());
+    Py_INCREF(PyEval_GetBuiltins());
+
+    /* probably should not be used as not part of the API */
+
+    newfunc = (PyFunctionObject *)PyFunction_New((PyObject *)code,
+                                                 func_global_namespace);
+    return (PyObject *)newfunc;
+}
+
+static PyObject *
+extract_func_data(PicklerObject *self, PyObject *obj)
+{
+    PyObject *co;
+    PickleState *st = _Pickle_GetGlobalState();
+
+    _Py_IDENTIFIER(__code__);
+    if (_PyObject_LookupAttrId((PyObject *)obj, &PyId___code__, &co) < 0) {
+        return NULL;
+    }
+
+
+    /* add attribute error handling for PyPy builtin-code object? */
+
+    PyObject *global_names, *globals;
+    PyObject *f_globals = PyDict_New();
+
+    fill_globals(co, &global_names);
+    globals = PyFunction_GetGlobals(obj);
+    PyObject *iterator = PyObject_GetIter(global_names);
+    PyObject *item;
+
+    while ((item = PyIter_Next(iterator))) {
+        PyDict_SetItem(f_globals, item, PyDict_GetItem(globals, item));
+        Py_DECREF(item);
+    }
+
+    if (PyErr_Occurred()) {
+        return NULL;
+    }
+
+    /* process closure */
+    _Py_IDENTIFIER(__closure__);
+    PyObject *closure = NULL;
+    if (_PyObject_LookupAttrId((PyObject *)obj,
+                               &PyId___closure__, &closure) < 0) {
+        PyErr_SetString(st->PicklingError, "no __closure__ attribute");
+        return NULL;
+    }
+
+    PyObject *f_dict = NULL;
+    _Py_IDENTIFIER(__dict__);
+    if (_PyObject_LookupAttrId((PyObject *)obj,
+                               &PyId___dict__, &f_dict) < 0) {
+        PyErr_SetString(st->PicklingError, "no __dict__ attribute");
+        return NULL;
+    }
+
+    _Py_IDENTIFIER(__module__);
+    PyObject *f_module = NULL;
+    if ((_PyObject_LookupAttrId((PyObject *)obj,
+                    &PyId___module__, &f_module) < 0) ||
+        (f_module == Py_None)) {
+        f_module = PyDict_New();
+        }
+
+    PyObject *f_defaults;
+    f_defaults = PyFunction_GetDefaults(obj);
+    if (f_defaults == NULL)
+        f_defaults = Py_None;
+        Py_INCREF(Py_None);
+
+    PyObject *state = PyTuple_New(6);
+    /* use PyTuple_Pack? */
+    PyTuple_SET_ITEM(state, 0, co);
+    PyTuple_SET_ITEM(state, 1, f_globals);
+    PyTuple_SET_ITEM(state, 2, f_defaults);
+    PyTuple_SET_ITEM(state, 3, closure);
+    PyTuple_SET_ITEM(state, 4, f_dict);
+    PyTuple_SET_ITEM(state, 5, f_module);
+    return state;
+}
+
+static int 
+save_function(PicklerObject *self, PyObject *obj)
+{
+    PyObject *module = NULL, *modules = NULL, *main_module = NULL;
+    PyObject *module_name = NULL;
+    PyObject *global_name = NULL;
+    PyObject *dotted_path = NULL;
+    int status = 0;
+    int defined_in_main = 1;
+
+    _Py_IDENTIFIER(__name__);
+    _Py_IDENTIFIER(__qualname__);
+
+    _Py_IDENTIFIER(modules);
+
+    modules = _PySys_GetObjectId(&PyId_modules);
+    main_module = PyDict_GetItemString(modules, "__main__");
+
+    if (_PyObject_LookupAttrId(obj, &PyId___qualname__, &global_name) < 0)
+        goto error;
+    if (global_name == NULL) {
+        global_name = _PyObject_GetAttrId(obj, &PyId___name__);
+        if (global_name == NULL)
+            goto error;
+    }
+
+    dotted_path = get_dotted_path(module, global_name);
+    if (dotted_path == NULL)
+        goto error;
+
+    /* look first for obj in the __main__ module before searching in other
+     * modules, to avoid being fooled by potential references to __main__ in
+     * sys.modules (for example, __mp_main__) */
+
+    PyObject *lastname = NULL, *cls = NULL, *parent = NULL;
+
+    lastname = PyList_GET_ITEM(dotted_path, PyList_GET_SIZE(dotted_path)-1);
+    Py_INCREF(lastname);
+
+    cls = get_deep_attribute(main_module, dotted_path, &parent);
+
+    if  (cls != obj){
+        module_name = whichmodule(obj, dotted_path);
+
+        if (module_name == NULL)
+            goto error;
+
+        module = PyImport_Import(module_name);
+
+        cls = get_deep_attribute(module, dotted_path, &parent);
+        defined_in_main = _PyUnicode_EqualToASCIIString(module_name,
+                                                        "__main__");
+    }
+
+    Py_CLEAR(dotted_path);
+
+    if (defined_in_main || ((cls == NULL) || (cls != obj))) {
+        PyObject *pickle_module = PyImport_ImportModule("_pickle");
+        PyObject *_fill_function_obj, *make_skel_func_obj;
+        const char mark_op = MARK;
+        const char reduce_op = REDUCE;
+        const char tuple_op = TUPLE;
+
+        make_skel_func_obj = PyObject_GetAttrString(pickle_module,
+                "make_skel_func");
+        _fill_function_obj = PyObject_GetAttrString(pickle_module,
+                "_fill_function");
+
+        PyObject *state_tuple = extract_func_data(self, obj);
+        PyObject *co, *f_globals, *f_defaults, *processed_closure, *f_dict;
+        PyObject *f_module;
+
+        co = PyTuple_GET_ITEM(state_tuple, 0);
+        f_globals = PyTuple_GET_ITEM(state_tuple, 1);
+        f_defaults = PyTuple_GET_ITEM(state_tuple, 2);
+        processed_closure = PyTuple_GET_ITEM(state_tuple, 3);
+        f_dict = PyTuple_GET_ITEM(state_tuple, 4);
+        f_module = PyTuple_GET_ITEM(state_tuple, 5);
+
+
+        PyObject *state = PyDict_New();
+
+        PyDict_SetItemString(state, "globals", f_globals);
+        PyDict_SetItemString(state, "defaults", f_defaults);
+        PyDict_SetItemString(state, "closure_values", processed_closure);
+        PyDict_SetItemString(state, "dict", f_dict);
+        PyDict_SetItemString(state, "base_globals", f_module);
+
+        PyDict_SetItemString(state, "name",
+                            ((PyFunctionObject *)obj) -> func_name);
+        Py_INCREF(((PyFunctionObject *)obj) -> func_name);
+
+        PyDict_SetItemString(state, "doc",
+                            ((PyFunctionObject *)obj) -> func_doc);
+        Py_INCREF(((PyFunctionObject *)obj) -> func_doc);
+
+        PyDict_SetItemString(state, "module", PyFunction_GET_MODULE(obj));
+
+        save_global(self, _fill_function_obj, NULL);
+        _Pickler_Write(self, &mark_op, 1);
+
+        save_subimports(self, co, PyDict_Values(f_globals));
+
+        save_global(self, make_skel_func_obj, NULL);
+
+        PyObject *make_skel_func_args = PyTuple_New(2);
+        PyTuple_SetItem(make_skel_func_args, 0, co);
+        PyTuple_SetItem(make_skel_func_args, 1, f_module);
+
+        save_tuple(self, make_skel_func_args);
+        _Pickler_Write(self, &reduce_op, 1);
+
+        save_dict(self, state);
+        _Pickler_Write(self, &tuple_op, 1);
+        _Pickler_Write(self, &reduce_op, 1);
+    }
+    else {
+        save_global(self, obj, NULL);
+
+    }
+
+    if (0) {
+  error:
+        status = -1;
+    }
+    return status;
+}
+
 static int
 save(PicklerObject *self, PyObject *obj, int pers_save)
 {
@@ -4022,8 +4495,22 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
         status = save_type(self, obj);
         goto done;
     }
+    else if (type == &PyCode_Type) {
+       status = save_code(self, obj);
+       goto done;
+    }
+    else if (type == &PyCell_Type) {
+       status = save_cell(self, obj);
+       goto done;
+    }
+    else if (type == &PyModule_Type) {
+       status = save_module(self, obj);
+       goto done;
+
+    }
+
     else if (type == &PyFunction_Type) {
-        status = save_global(self, obj, NULL);
+        status = save_function(self, obj);
         goto done;
     }
 
@@ -6312,13 +6799,26 @@ load_reduce(UnpicklerObject *self)
     PyObject *callable = NULL;
     PyObject *argtup = NULL;
     PyObject *obj = NULL;
+    PyObject *pickle_module = NULL, *make_skel_func_obj = NULL;
+    PickleState *st = _Pickle_GetGlobalState();
+
+    pickle_module = PyImport_ImportModule("_pickle");
+    make_skel_func_obj = PyObject_GetAttrString(pickle_module,
+                                                "make_skel_func");
 
     PDATA_POP(self->stack, argtup);
     if (argtup == NULL)
         return -1;
     PDATA_POP(self->stack, callable);
     if (callable) {
-        obj = PyObject_CallObject(callable, argtup);
+        if (!self->allow_dynamic_objects &&
+            callable == make_skel_func_obj){
+            PyErr_SetString(st->UnpicklingError,
+                            "Attempting to load dynamic objects");
+        }
+        else{
+            obj = PyObject_CallObject(callable, argtup);
+        }
         Py_DECREF(callable);
     }
     Py_DECREF(argtup);
@@ -6739,6 +7239,7 @@ _pickle.Unpickler.__init__
   fix_imports: bool = True
   encoding: str = 'ASCII'
   errors: str = 'strict'
+  allow_dynamic_objects: bool = False
 
 This takes a binary file for reading a pickle data stream.
 
@@ -6765,8 +7266,9 @@ string instances as bytes objects.
 static int
 _pickle_Unpickler___init___impl(UnpicklerObject *self, PyObject *file,
                                 int fix_imports, const char *encoding,
-                                const char *errors)
-/*[clinic end generated code: output=e2c8ce748edc57b0 input=f9b7da04f5f4f335]*/
+                                const char *errors,
+                                int allow_dynamic_objects)
+/*[clinic end generated code: output=af1f93e0b4864246 input=191060f51124c484]*/
 {
     _Py_IDENTIFIER(persistent_load);
 
@@ -6798,6 +7300,8 @@ _pickle_Unpickler___init___impl(UnpicklerObject *self, PyObject *file,
         return -1;
 
     self->proto = 0;
+
+    self->allow_dynamic_objects = allow_dynamic_objects;
 
     return 0;
 }
@@ -7214,6 +7718,42 @@ _pickle_dump_impl(PyObject *module, PyObject *obj, PyObject *file,
     Py_XDECREF(pickler);
     return NULL;
 }
+/*[clinic input]
+_pickle._fill_function
+    func: 'O'
+    state: 'O'
+    /
+fills a function with its state.
+[clinic start generated code]*/
+
+static PyObject *
+_pickle__fill_function_impl(PyObject *module, PyObject *func,
+                            PyObject *state)
+/*[clinic end generated code: output=301f51eca294d882 input=7313f7950f43b7f5]*/
+{
+    if (!PyDict_Check(state)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    PyDict_Update(PyFunction_GetGlobals(func),
+                  PyDict_GetItemString(state, "globals"));
+
+    PyFunction_SetDefaults(func, PyDict_GetItemString(state, "defaults"));
+
+    PyObject_SetAttrString(func, "__name__",
+                           PyDict_GetItemString(state, "name"));
+
+    PyObject_SetAttrString(func, "__dict__",
+                           PyDict_GetItemString(state, "dict"));
+
+    PyFunction_SetClosure(func, PyDict_GetItemString(state, "closure_values"));
+
+    PyObject_SetAttrString(func, "__module__",
+                           PyDict_GetItemString(state, "module"));
+
+    Py_INCREF(func);
+    return func;
+}
 
 /*[clinic input]
 
@@ -7275,6 +7815,7 @@ _pickle.load
   fix_imports: bool = True
   encoding: str = 'ASCII'
   errors: str = 'strict'
+  allow_dynamic_objects: bool = False
 
 Read and return an object from the pickle data stored in a file.
 
@@ -7303,8 +7844,9 @@ string instances as bytes objects.
 
 static PyObject *
 _pickle_load_impl(PyObject *module, PyObject *file, int fix_imports,
-                  const char *encoding, const char *errors)
-/*[clinic end generated code: output=69e298160285199e input=01b44dd3fc07afa7]*/
+                  const char *encoding, const char *errors,
+                  int allow_dynamic_objects)
+/*[clinic end generated code: output=8a9236ea46d0ae36 input=01a230a94ec309c5]*/
 {
     PyObject *result;
     UnpicklerObject *unpickler = _Unpickler_New();
@@ -7319,6 +7861,8 @@ _pickle_load_impl(PyObject *module, PyObject *file, int fix_imports,
         goto error;
 
     unpickler->fix_imports = fix_imports;
+
+    unpickler->allow_dynamic_objects = allow_dynamic_objects;
 
     result = load(unpickler);
     Py_DECREF(unpickler);
@@ -7338,6 +7882,7 @@ _pickle.loads
   fix_imports: bool = True
   encoding: str = 'ASCII'
   errors: str = 'strict'
+  allow_dynamic_objects: bool = False
 
 Read and return an object from the given pickle data.
 
@@ -7357,8 +7902,9 @@ string instances as bytes objects.
 
 static PyObject *
 _pickle_loads_impl(PyObject *module, PyObject *data, int fix_imports,
-                   const char *encoding, const char *errors)
-/*[clinic end generated code: output=1e7cb2343f2c440f input=70605948a719feb9]*/
+                   const char *encoding, const char *errors,
+                   int allow_dynamic_objects)
+/*[clinic end generated code: output=1a19635917915744 input=c1b72bc8a82f7869]*/
 {
     PyObject *result;
     UnpicklerObject *unpickler = _Unpickler_New();
@@ -7374,6 +7920,8 @@ _pickle_loads_impl(PyObject *module, PyObject *data, int fix_imports,
 
     unpickler->fix_imports = fix_imports;
 
+    unpickler->allow_dynamic_objects = allow_dynamic_objects;
+
     result = load(unpickler);
     Py_DECREF(unpickler);
     return result;
@@ -7388,6 +7936,8 @@ static struct PyMethodDef pickle_methods[] = {
     _PICKLE_DUMPS_METHODDEF
     _PICKLE_LOAD_METHODDEF
     _PICKLE_LOADS_METHODDEF
+    _PICKLE__FILL_FUNCTION_METHODDEF
+    _PICKLE_MAKE_SKEL_FUNC_METHODDEF
     {NULL, NULL} /* sentinel */
 };
 
