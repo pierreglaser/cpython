@@ -2560,26 +2560,28 @@ class AbstractPickleTests(unittest.TestCase):
                     self.assertIn(('c%s\n%s' % (mod, name)).encode(), pickled)
                     self.assertIs(type(self.loads(pickled)), type(val))
 
-    def test_local_lookup_error(self):
-        # Test that whichmodule() errors out cleanly when looking up
-        # an assumed globally-reachable object fails.
+    def test_nested_functions(self):
+        # Tests the pickling of functions defined in a local scope
         def f():
-            pass
-        # Since the function is local, lookup will fail
+            return 1
+
         for proto in range(0, pickle.HIGHEST_PROTOCOL + 1):
-            with self.assertRaises((AttributeError, pickle.PicklingError)):
-                pickletools.dis(self.dumps(f, proto))
+                depickled_func = pickle.loads(
+                    pickle.dumps(f), allow_dynamic_objects=True)
+                self.assertEqual(depickled_func(), 1)
         # Same without a __module__ attribute (exercises a different path
         # in _pickle.c).
         del f.__module__
         for proto in range(0, pickle.HIGHEST_PROTOCOL + 1):
-            with self.assertRaises((AttributeError, pickle.PicklingError)):
-                pickletools.dis(self.dumps(f, proto))
+                depickled_func = pickle.loads(
+                    pickle.dumps(f), allow_dynamic_objects=True)
+                self.assertEqual(depickled_func(), 1)
         # Yet a different path.
         f.__name__ = f.__qualname__
         for proto in range(0, pickle.HIGHEST_PROTOCOL + 1):
-            with self.assertRaises((AttributeError, pickle.PicklingError)):
-                pickletools.dis(self.dumps(f, proto))
+                depickled_func = pickle.loads(
+                    pickle.dumps(f), allow_dynamic_objects=True)
+                self.assertEqual(depickled_func(), 1)
 
 
 class BigmemPickleTests(unittest.TestCase):
