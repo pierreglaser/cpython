@@ -2407,10 +2407,13 @@ class AbstractPickleTests(unittest.TestCase):
             return CONSTANT + 1
 
 
-        # function using a submodule
-        #  - whose parent module has been imported
-        #  - that neither explicitally imported in the
-        #    current script, nor in the __init__'s of its parent package
+        # Test making sure that a function using a submodule that are
+        # referenced as an attribute to its package but not imported in the
+        # __init__ of its package does not raise an AttributeError when
+        # depickled in a fresh new environment
+
+        # examples of such submodules in the standard library include:
+        # - http.cookies, unittest.mock, curses.textpad, xml.etree
         def f_needing_subimport():
             y = xml.etree.ElementTree
             return y
