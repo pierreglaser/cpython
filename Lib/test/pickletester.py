@@ -2277,6 +2277,13 @@ class AbstractPickleTests(unittest.TestCase):
             unpickled = self.loads(self.dumps(pickle, proto))
             self.assertIs(pickle, unpickled)
 
+    def test_cell(self):
+        cellobject = cell(1)
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            unpickled_cellobject = self.loads(self.dumps(cellobject, proto))
+            self.assertEqual(cellobject.cell_contents,
+                             unpickled_cellobject.cell_contents)
+
     def test_allow_dyanamic_objects_switch(self):
         pickled_func_path = 'pickled_func.pk'
         main_script = """
