@@ -21,7 +21,6 @@ from test.pickletester import AbstractDispatchTableTests
 from test.pickletester import BigmemPickleTests
 
 try:
-    raise ImportError
     import _pickle
     has_c_implementation = True
 except ImportError:

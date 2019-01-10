@@ -1912,7 +1912,6 @@ def _loads(s, *, allow_dynamic_objects=False, fix_imports=True,
 
 # Use the faster _pickle if possible
 try:
-    raise ImportError
     from _pickle import (
         PickleError,
         PicklingError,
