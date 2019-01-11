@@ -4177,11 +4177,9 @@ _pickle_make_skel_func_impl(PyObject *module, PyObject *code,
     PyFunctionObject *newfunc = NULL;
     PyObject *f_base_module, *func_global_namespace = NULL;
 
-    if (base_globals == Py_None){
-        func_global_namespace = PyDict_New();
-    }
+    func_global_namespace = PyDict_New();
 
-    else if PyUnicode_Check(base_globals){
+    if PyUnicode_Check(base_globals){
         f_base_module = PyImport_ImportModule(
                 PyUnicode_AsUTF8(base_globals));
 
