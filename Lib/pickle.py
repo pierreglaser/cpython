@@ -741,7 +741,7 @@ class _Pickler:
 
 
         def func():
-            x = xml.etree.ElementTree
+            x = xml.etree
 
 
         if __name__ == '__main__':
@@ -749,13 +749,23 @@ class _Pickler:
         ```
 
         the globals extracted by pickle in the function's state include
-        the xml module, but not its submodule (here,
-        xml.etree), which is the module used by func.
+        the xml package, but not its submodule (here,
+        xml.etree) as it is referenced only as an attribute to xml.
 
-        To ensure that calling the depickled function does not raise an
-        AttributeError, this function looks for any currently loaded submodule
-        that the function uses and whose parent is present in the function
-        globals, and saves it before saving the function.
+        To ensure that calling the depickled function in a fresh environment
+        does not raise an AttributeError, this function looks for any module
+        that is:
+        - currently loaded (i.e present in sys.modules)
+        - that the code object references.
+        - whose parent is present in the function globals Each module
+          satifsying the above conditions is saved by the Pickler.
+
+
+
+        Note:
+        -----
+        Due to the way the function looks for module references in the code
+        object, unnessary modules can be pickled.
         """
 
         # check if any known dependency is an imported package
@@ -777,7 +787,7 @@ class _Pickler:
                             self.write(POP)
 
     def save_function_tuple(self, func):
-        """  Pickles an actual func object.
+        """ Pickles an actual func object.
 
         A func comprises: code, globals, defaults, closure, and dict.  We
         extract and save these, injecting reducing functions at certain points
