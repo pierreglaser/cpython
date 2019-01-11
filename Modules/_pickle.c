@@ -4211,15 +4211,12 @@ static PyObject *
 extract_func_data(PicklerObject *self, PyObject *obj)
 {
     PyObject *co;
-    PickleState *st = _Pickle_GetGlobalState();
 
     _Py_IDENTIFIER(__code__);
     if (_PyObject_LookupAttrId((PyObject *)obj, &PyId___code__, &co) < 0) {
         return NULL;
     }
 
-
-    /* add attribute error handling for PyPy builtin-code object? */
 
     PyObject *global_names, *globals;
     PyObject *f_globals = PyDict_New();
@@ -4243,7 +4240,7 @@ extract_func_data(PicklerObject *self, PyObject *obj)
     PyObject *closure = NULL;
     if (_PyObject_LookupAttrId((PyObject *)obj,
                                &PyId___closure__, &closure) < 0) {
-        PyErr_SetString(st->PicklingError, "no __closure__ attribute");
+        PyErr_SetString(PyExc_AttributeError, "__closure__");
         return NULL;
     }
 
@@ -4251,17 +4248,19 @@ extract_func_data(PicklerObject *self, PyObject *obj)
     _Py_IDENTIFIER(__dict__);
     if (_PyObject_LookupAttrId((PyObject *)obj,
                                &PyId___dict__, &f_dict) < 0) {
-        PyErr_SetString(st->PicklingError, "no __dict__ attribute");
+        PyErr_SetString(PyExc_AttributeError, "__dict__");
         return NULL;
     }
 
     _Py_IDENTIFIER(__module__);
     PyObject *f_module = NULL;
-    if ((_PyObject_LookupAttrId((PyObject *)obj,
-                    &PyId___module__, &f_module) < 0) ||
-        (f_module == Py_None)) {
-        f_module = PyDict_New();
+    if ((_PyObject_LookupAttrId((PyObject *)obj, &PyId___module__, &f_module) <0)){
+        PyErr_SetString(PyExc_AttributeError, "__module__");
         }
+
+    if ((f_module == Py_None) || (f_module == NULL)) {
+        f_module = PyDict_New();
+    }
 
     PyObject *f_defaults;
     f_defaults = PyFunction_GetDefaults(obj);
@@ -4369,14 +4368,13 @@ save_function(PicklerObject *self, PyObject *obj)
         PyDict_SetItemString(state, "base_globals", f_module);
 
         PyDict_SetItemString(state, "name",
-                            ((PyFunctionObject *)obj) -> func_name);
-        Py_INCREF(((PyFunctionObject *)obj) -> func_name);
+                             PyObject_GetAttrString(obj, "__name__"));
 
         PyDict_SetItemString(state, "doc",
-                            ((PyFunctionObject *)obj) -> func_doc);
-        Py_INCREF(((PyFunctionObject *)obj) -> func_doc);
+                             PyObject_GetAttrString(obj, "__doc__"));
 
-        PyDict_SetItemString(state, "module", PyFunction_GET_MODULE(obj));
+        PyDict_SetItemString(state, "module",
+                             PyObject_GetAttrString(obj, "__module__"));
 
         save_global(self, _fill_function_obj, NULL);
         _Pickler_Write(self, &mark_op, 1);
