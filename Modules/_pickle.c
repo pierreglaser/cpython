@@ -4337,11 +4337,17 @@ save_function(PicklerObject *self, PyObject *obj)
         PyObject *f_module;
 
         co = PyTuple_GET_ITEM(state_tuple, 0);
+        Py_INCREF(co);
         f_globals = PyTuple_GET_ITEM(state_tuple, 1);
+        Py_INCREF(f_globals);
         f_defaults = PyTuple_GET_ITEM(state_tuple, 2);
+        Py_INCREF(f_defaults);
         processed_closure = PyTuple_GET_ITEM(state_tuple, 3);
+        Py_INCREF(processed_closure);
         f_dict = PyTuple_GET_ITEM(state_tuple, 4);
+        Py_INCREF(f_dict);
         f_module = PyTuple_GET_ITEM(state_tuple, 5);
+        Py_INCREF(f_module);
 
 
         PyObject *state = PyDict_New();
