@@ -4143,7 +4143,7 @@ static int fill_globals(PyObject *co, PyObject **val){
 }
 
 /*[clinic input]
-_pickle.make_skel_func
+_pickle._make_skel_func
 
   code: object
   base_globals: object
@@ -4156,9 +4156,9 @@ in func_closure.  All other func attributes (e.g. func_globals) are empty.
 [clinic start generated code]*/
 
 static PyObject *
-_pickle_make_skel_func_impl(PyObject *module, PyObject *code,
-                            PyObject *base_globals)
-/*[clinic end generated code: output=8671cb7220fc8cd5 input=241e46d9fbaa89f0]*/
+_pickle__make_skel_func_impl(PyObject *module, PyObject *code,
+                             PyObject *base_globals)
+/*[clinic end generated code: output=138a7627805277a8 input=68d85b7e6c6569b2]*/
 
 {
     PyFunctionObject *newfunc = NULL;
@@ -4185,7 +4185,6 @@ _pickle_make_skel_func_impl(PyObject *module, PyObject *code,
                    PyEval_GetBuiltins());
     Py_INCREF(PyEval_GetBuiltins());
 
-    /* probably should not be used as not part of the API */
 
     newfunc = (PyFunctionObject *)PyFunction_New((PyObject *)code,
                                                  func_global_namespace);
@@ -4328,7 +4327,7 @@ save_function(PicklerObject *self, PyObject *obj)
         const char tuple_op = TUPLE;
 
         make_skel_func_obj = PyObject_GetAttrString(pickle_module,
-                "make_skel_func");
+                "_make_skel_func");
         _fill_function_obj = PyObject_GetAttrString(pickle_module,
                 "_fill_function");
 
@@ -6806,7 +6805,7 @@ load_reduce(UnpicklerObject *self)
 
     pickle_module = PyImport_ImportModule("_pickle");
     make_skel_func_obj = PyObject_GetAttrString(pickle_module,
-                                                "make_skel_func");
+                                                "_make_skel_func");
 
     PDATA_POP(self->stack, argtup);
     if (argtup == NULL)
@@ -7937,7 +7936,7 @@ static struct PyMethodDef pickle_methods[] = {
     _PICKLE_LOAD_METHODDEF
     _PICKLE_LOADS_METHODDEF
     _PICKLE__FILL_FUNCTION_METHODDEF
-    _PICKLE_MAKE_SKEL_FUNC_METHODDEF
+    _PICKLE__MAKE_SKEL_FUNC_METHODDEF
     {NULL, NULL} /* sentinel */
 };
 
