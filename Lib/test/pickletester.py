@@ -2326,11 +2326,63 @@ class AbstractPickleTests(unittest.TestCase):
 
         try:
             env_vars = {'COVERAGE_PROCESS_START': os.environ.get(
-                        "COVERAGE_PROCESS_START")}
-            # enabling subprocess coverage requires the creation of a .pth
-            # file, that causes site.py # to raise a DeprecationWarning
-            assert_python_ok('-W', 'ignore::DeprecationWarning',
-                             '-c', textwrap.dedent(main_script),
+                        "COVERAGE_PROCESS_START", "")}
+            assert_python_ok('-S', '-c', textwrap.dedent(main_script),
+                             **env_vars)
+        finally:
+            unlink(pickled_func_path)
+
+    def test_recursive_closure(self):
+        pickled_func_path = 'pickled_func.pk'
+
+        main_subprocess_script = """'''
+        import pickle
+        import textwrap
+
+
+        with open("{pickled_func_path}", "rb") as f:
+            funcs = pickle.load(f, allow_dynamic_objects=True)
+
+        f1, f2 = funcs
+
+        g = f1()
+
+
+        assert g == g()
+
+        assert f2(2)(5) == 240, f2(5)
+
+        '''""".format(pickled_func_path=pickled_func_path)
+
+        main_script = """
+        import pickle
+        import textwrap
+
+        from test.support.script_helper import assert_python_ok
+
+        def f1():
+            def g():
+                return g
+            return g
+
+        def f2(base):
+            def g(n):
+                return base if n <= 1 else n * g(n - 1)
+            return g
+
+
+        with open("{pickled_func_path}", "wb") as f:
+            pickle.dump([f1, f2], f)
+
+        assert_python_ok("-c", {main_subprocess_script})
+
+        """.format(pickled_func_path=pickled_func_path,
+                   main_subprocess_script=main_subprocess_script)
+
+        try:
+            env_vars = {'COVERAGE_PROCESS_START': os.environ.get(
+                        "COVERAGE_PROCESS_START", "")}
+            assert_python_ok('-S', '-c', textwrap.dedent(main_script),
                              **env_vars)
         finally:
             unlink(pickled_func_path)
@@ -2447,11 +2499,8 @@ class AbstractPickleTests(unittest.TestCase):
 
         try:
             env_vars = {'COVERAGE_PROCESS_START': os.environ.get(
-                        "COVERAGE_PROCESS_START")}
-            # enabling subprocess coverage requires the creation of a .pth
-            # file, that causes site.py # to raise a DeprecationWarning
-            assert_python_ok('-W', 'ignore::DeprecationWarning',
-                             '-c', textwrap.dedent(main_script),
+                        "COVERAGE_PROCESS_START", "")}
+            assert_python_ok('-S', '-c', textwrap.dedent(main_script),
                              **env_vars)
         finally:
             unlink(pickled_func_path)
