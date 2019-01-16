@@ -2308,7 +2308,7 @@ class AbstractPickleTests(unittest.TestCase):
         # pickle.loads is called with the allow_dynamic_objects switch off
         try:
             pickle.loads(pickle.dumps(f0), allow_dynamic_objects=False)
-        except pickle.PicklingError:
+        except pickle.UnpicklingError:
             pass
         else:
             raise AssertionError('loading this function should raise a'
@@ -2317,7 +2317,7 @@ class AbstractPickleTests(unittest.TestCase):
         try:
             with open("{pickled_func_path}", "rb") as f:
                 func = pickle.load(f,allow_dynamic_objects=False)
-        except pickle.PicklingError:
+        except pickle.UnpicklingError:
             pass
         else:
             raise AssertionError('loading this function should raise a'
