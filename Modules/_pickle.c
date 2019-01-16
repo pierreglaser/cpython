@@ -3001,64 +3001,51 @@ batch_dict_exact(PicklerObject *self, PyObject *obj)
 }
 
 static int save_code(PicklerObject *self, PyObject *obj){
-    PyObject *type_module = NULL, *code_type = NULL;
-    type_module = PyImport_ImportModule("types");
-    code_type = PyObject_GetAttrString(type_module, "CodeType");
-    save(self, code_type, 0);
-    PyObject *ret = PyTuple_New(15);
+    PyObject *save_reduce_tuple = NULL;
+    PyObject *state = NULL;
 
-    PyTuple_SetItem(ret, 0 , PyObject_GetAttrString(obj, "co_argcount"));
-    PyTuple_SetItem(ret, 1 , PyObject_GetAttrString(obj, "co_kwonlyargcount"));
-    PyTuple_SetItem(ret, 2 , PyObject_GetAttrString(obj, "co_nlocals"));
-    PyTuple_SetItem(ret, 3 , PyObject_GetAttrString(obj, "co_stacksize"));
-    PyTuple_SetItem(ret, 4 , PyObject_GetAttrString(obj, "co_flags"));
-    PyTuple_SetItem(ret, 5 , PyObject_GetAttrString(obj, "co_code"));
-    PyTuple_SetItem(ret, 6 , PyObject_GetAttrString(obj, "co_consts"));
-    PyTuple_SetItem(ret, 7 , PyObject_GetAttrString(obj, "co_names"));
-    PyTuple_SetItem(ret, 8 , PyObject_GetAttrString(obj, "co_varnames"));
-    PyTuple_SetItem(ret, 9,  PyObject_GetAttrString(obj, "co_filename"));
-    PyTuple_SetItem(ret, 10, PyObject_GetAttrString(obj, "co_name"));
-    PyTuple_SetItem(ret, 11, PyObject_GetAttrString(obj, "co_firstlineno"));
-    PyTuple_SetItem(ret, 12, PyObject_GetAttrString(obj, "co_lnotab"));
-    PyTuple_SetItem(ret, 13, PyObject_GetAttrString(obj, "co_freevars"));
-    PyTuple_SetItem(ret, 14, PyObject_GetAttrString(obj, "co_cellvars"));
+    state = Py_BuildValue("(OOOOOOOOOOOOOOO)",
+                          PyObject_GetAttrString(obj, "co_argcount"),
+                          PyObject_GetAttrString(obj, "co_kwonlyargcount"),
+                          PyObject_GetAttrString(obj, "co_nlocals"),
+                          PyObject_GetAttrString(obj, "co_stacksize"),
+                          PyObject_GetAttrString(obj, "co_flags"),
+                          PyObject_GetAttrString(obj, "co_code"),
+                          PyObject_GetAttrString(obj, "co_consts"),
+                          PyObject_GetAttrString(obj, "co_names"),
+                          PyObject_GetAttrString(obj, "co_varnames"),
+                          PyObject_GetAttrString(obj, "co_filename"),
+                          PyObject_GetAttrString(obj, "co_name"),
+                          PyObject_GetAttrString(obj, "co_firstlineno"),
+                          PyObject_GetAttrString(obj, "co_lnotab"),
+                          PyObject_GetAttrString(obj, "co_freevars"),
+                          PyObject_GetAttrString(obj, "co_cellvars"));
 
-    save(self, ret, 0);
-    const char reduce_op = REDUCE;
-    _Pickler_Write(self, &reduce_op, 1);
+
+    save_reduce_tuple = Py_BuildValue("(OO)", (PyObject*)&PyCode_Type, state);
+    save_reduce(self, save_reduce_tuple,  obj);
     return 0;
 }
 
 static int save_cell(PicklerObject *self, PyObject *obj){
-    PyObject *bltin_module = NULL, *cell_type = NULL;
-    bltin_module = PyImport_ImportModule("builtins");
-    cell_type = PyObject_GetAttrString(bltin_module, "cell");
-    save(self, cell_type, 0);
-
-    PyObject *ret = PyTuple_New(1);
-    PyTuple_SetItem(ret, 0 , PyObject_GetAttrString(obj, "cell_contents"));
-    save(self, ret, 0);
-
-    const char reduce_op = REDUCE;
-    _Pickler_Write(self, &reduce_op, 1);
+    PyObject *save_reduce_tuple = NULL;
+    save_reduce_tuple = Py_BuildValue("(O(O))", (PyObject*)&PyCell_Type,
+                                      PyObject_GetAttrString(obj, "cell_contents"));
+    save_reduce(self, save_reduce_tuple,  obj);
     return 0;
 }
 
 static int save_module(PicklerObject *self, PyObject *obj){
-
-    PyObject *builtins, *import_function, *ret = NULL;
+    PyObject *builtins, *import_function = NULL;
+    PyObject *save_reduce_tuple = NULL;
 
     builtins = PyEval_GetBuiltins();
     import_function = PyDict_GetItemString(builtins, "__import__");
 
-    save(self, import_function, 0);
+    save_reduce_tuple = Py_BuildValue("(O(O))", import_function,
+                                      PyObject_GetAttrString(obj, "__name__"));
 
-    ret = PyTuple_New(1);
-    PyTuple_SetItem(ret, 0 , PyObject_GetAttrString(obj, "__name__"));
-    save(self, ret, 0);
-
-    const char reduce_op = REDUCE;
-    _Pickler_Write(self, &reduce_op, 1);
+    save_reduce(self, save_reduce_tuple,  obj);
     return 0;
 }
 
