@@ -72,17 +72,19 @@ LOAD_GLOBAL = opcode.opmap['LOAD_GLOBAL']
 GLOBAL_OPS = (STORE_GLOBAL, DELETE_GLOBAL, LOAD_GLOBAL)
 
 
-def _fill_function(*args):
-    """Fill a skeleton function object with the restt of the function's data
+def _fill_function(func, state):
+    """Fill a skeleton function object with the rest of the function's data
 
     The skeleton itself is created by _make_skel_func()
     """
-    func, state = args
-
     # Only set global variables that do not exist.
     for k, v in state['globals'].items():
         if k not in func.__globals__:
             func.__globals__[k] = v
+
+    if state['closure_values'] is not None:
+        for i, cell in enumerate(state['closure_values']):
+            func.__closure__[i].cell_contents = cell.cell_contents
 
     func.__defaults__ = state['defaults']
     func.__dict__ = state['dict']
@@ -95,12 +97,13 @@ def _fill_function(*args):
     return func
 
 
-def _make_skel_func(code, base_globals=None, closure=None):
+def _make_skel_func(code, base_globals=None, cell_count=None):
     """ Creates a skeleton function object that contains just the provided
         code and the correct number of cells in func_closure.  All other
         func attributes (e.g. func_globals) are empty.
     """
     base_globals = {'__builtins__': __builtins__}
+    closure = tuple(cell() for _ in range(cell_count))
 
     return types.FunctionType(code, base_globals, None, None, closure)
 
@@ -814,7 +817,7 @@ class _Pickler:
         save((
             code,
             base_globals,
-            closure
+            len(closure) if closure is not None else 0
         ))
         write(REDUCE)
         self.memoize(func)
