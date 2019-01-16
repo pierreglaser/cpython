@@ -71,6 +71,11 @@ DELETE_GLOBAL = opcode.opmap['DELETE_GLOBAL']
 LOAD_GLOBAL = opcode.opmap['LOAD_GLOBAL']
 GLOBAL_OPS = (STORE_GLOBAL, DELETE_GLOBAL, LOAD_GLOBAL)
 
+try:
+    from _pickle import _make_skel_func as c__make_skel_func
+except ImportError:
+    c__make_skel_func = None
+
 
 def _fill_function(func, state):
     """Fill a skeleton function object with the rest of the function's data
@@ -1740,7 +1745,8 @@ class _Unpickler:
         func = stack[-1]
         # prevent make_skel_func from being executed if the _Unpickler's
         # allow_dynamic_objects switch is off
-        if not self.allow_dynamic_objects and func is _make_skel_func:
+        if (not self.allow_dynamic_objects and
+                (func is _make_skel_func or func is c__make_skel_func)):
             raise PicklingError(
                     'Attempting to load dynamic objects')
         stack[-1] = func(*args)
