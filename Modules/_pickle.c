@@ -4385,6 +4385,9 @@ save_function(PicklerObject *self, PyObject *obj)
         save_tuple(self, make_skel_func_args);
         _Pickler_Write(self, &reduce_op, 1);
 
+        if (memo_put(self, obj) < 0)
+            goto error;
+
         save_dict(self, state);
         _Pickler_Write(self, &tuple_op, 1);
         _Pickler_Write(self, &reduce_op, 1);
