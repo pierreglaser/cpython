@@ -4355,7 +4355,6 @@ save_function(PicklerObject *self, PyObject *obj)
         PyDict_SetItemString(state, "defaults", f_defaults);
         PyDict_SetItemString(state, "closure_values", processed_closure);
         PyDict_SetItemString(state, "dict", f_dict);
-        PyDict_SetItemString(state, "base_globals", f_module);
 
         PyDict_SetItemString(state, "name",
                              PyObject_GetAttrString(obj, "__name__"));
@@ -4366,12 +4365,18 @@ save_function(PicklerObject *self, PyObject *obj)
         PyDict_SetItemString(state, "module",
                              PyObject_GetAttrString(obj, "__module__"));
 
-        save_global(self, _fill_function_obj, NULL);
+        PyDict_SetItemString(state, "annotations",
+                             PyObject_GetAttrString(obj, "__annotations__"));
+
+        PyDict_SetItemString(state, "qualname",
+                             PyObject_GetAttrString(obj, "__qualname__"));
+
+        save(self, _fill_function_obj, 0);
         _Pickler_Write(self, &mark_op, 1);
 
         save_subimports(self, co, PyDict_Values(f_globals));
 
-        save_global(self, make_skel_func_obj, NULL);
+        save(self, make_skel_func_obj, 0);
 
         PyObject *make_skel_func_args = PyTuple_New(2);
         PyTuple_SetItem(make_skel_func_args, 0, co);
@@ -7749,6 +7754,12 @@ _pickle__fill_function_impl(PyObject *module, PyObject *func,
 
     PyObject_SetAttrString(func, "__module__",
                            PyDict_GetItemString(state, "module"));
+
+    PyObject_SetAttrString(func, "__annotations__",
+                           PyDict_GetItemString(state, "annotations"));
+
+    PyObject_SetAttrString(func, "__qualname__",
+                           PyDict_GetItemString(state, "qualname"));
 
     Py_INCREF(func);
     return func;
