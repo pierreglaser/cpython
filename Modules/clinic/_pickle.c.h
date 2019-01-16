@@ -2,8 +2,8 @@
 preserve
 [clinic start generated code]*/
 
-PyDoc_STRVAR(_pickle_make_skel_func__doc__,
-"make_skel_func($module, code, base_globals, /)\n"
+PyDoc_STRVAR(_pickle__make_skel_func__doc__,
+"_make_skel_func($module, code, base_globals, /)\n"
 "--\n"
 "\n"
 "Creates a skeleton function object.\n"
@@ -11,26 +11,26 @@ PyDoc_STRVAR(_pickle_make_skel_func__doc__,
 "This skeleton contains just the provided code and the correct number of cells\n"
 "in func_closure.  All other func attributes (e.g. func_globals) are empty.");
 
-#define _PICKLE_MAKE_SKEL_FUNC_METHODDEF    \
-    {"make_skel_func", (PyCFunction)_pickle_make_skel_func, METH_FASTCALL, _pickle_make_skel_func__doc__},
+#define _PICKLE__MAKE_SKEL_FUNC_METHODDEF    \
+    {"_make_skel_func", (PyCFunction)(void(*)(void))_pickle__make_skel_func, METH_FASTCALL, _pickle__make_skel_func__doc__},
 
 static PyObject *
-_pickle_make_skel_func_impl(PyObject *module, PyObject *code,
-                            PyObject *base_globals);
+_pickle__make_skel_func_impl(PyObject *module, PyObject *code,
+                             PyObject *base_globals);
 
 static PyObject *
-_pickle_make_skel_func(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+_pickle__make_skel_func(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
     PyObject *code;
     PyObject *base_globals;
 
-    if (!_PyArg_UnpackStack(args, nargs, "make_skel_func",
+    if (!_PyArg_UnpackStack(args, nargs, "_make_skel_func",
         2, 2,
         &code, &base_globals)) {
         goto exit;
     }
-    return_value = _pickle_make_skel_func_impl(module, code, base_globals);
+    return_value = _pickle__make_skel_func_impl(module, code, base_globals);
 
 exit:
     return return_value;
@@ -456,7 +456,7 @@ PyDoc_STRVAR(_pickle__fill_function__doc__,
 "fills a function with its state.");
 
 #define _PICKLE__FILL_FUNCTION_METHODDEF    \
-    {"_fill_function", (PyCFunction)_pickle__fill_function, METH_FASTCALL, _pickle__fill_function__doc__},
+    {"_fill_function", (PyCFunction)(void(*)(void))_pickle__fill_function, METH_FASTCALL, _pickle__fill_function__doc__},
 
 static PyObject *
 _pickle__fill_function_impl(PyObject *module, PyObject *func,
@@ -634,4 +634,4 @@ _pickle_loads(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=cf78e980315ad085 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=1fa32e9af35ad449 input=a9049054013a1b77]*/
