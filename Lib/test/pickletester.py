@@ -23,6 +23,7 @@ from test.support import (
 from pickle import bytes_types
 
 
+_TEST_GLOBAL_VARIABLE
 
 requires_32b = unittest.skipUnless(sys.maxsize < 2**32,
                                    "test is only meaningful on 32-bit builds")
@@ -2331,6 +2332,40 @@ class AbstractPickleTests(unittest.TestCase):
                              **env_vars)
         finally:
             unlink(pickled_func_path)
+
+    def test_closure_interacting_with_a_global_variable(self):
+        global _TEST_GLOBAL_VARIABLE
+        assert _TEST_GLOBAL_VARIABLE == "default_value"
+        orig_value = _TEST_GLOBAL_VARIABLE
+        try:
+            def f0():
+                global _TEST_GLOBAL_VARIABLE
+                _TEST_GLOBAL_VARIABLE = "changed_by_f0"
+
+            def f1():
+                return _TEST_GLOBAL_VARIABLE
+
+            cloned_f0 = self.loads(self.dumps(
+                f0, protocol=self.protocol))
+            cloned_f1 = self.loads(self.dumps(
+                f1, protocol=self.protocol))
+            pickled_f1 = self.dumps(f1, protocol=self.protocol)
+
+            # Change the value of the global variable
+            cloned_f0()
+            assert _TEST_GLOBAL_VARIABLE == "changed_by_f0"
+
+            # Ensure that the global variable is the same for another function
+            result_cloned_f1 = cloned_f1()
+            assert result_cloned_f1 == "changed_by_f0", result_cloned_f1
+            assert f1() == result_cloned_f1
+
+            # Ensure that unpickling the global variable does not change its
+            # value
+            result_pickled_f1 = self.loads(pickled_f1)()
+            assert result_pickled_f1 == "changed_by_f0", result_pickled_f1
+        finally:
+            _TEST_GLOBAL_VARIABLE = orig_value
 
     def test_recursive_closure(self):
         pickled_func_path = 'pickled_func.pk'
