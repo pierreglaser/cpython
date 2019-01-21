@@ -4,68 +4,75 @@ simply discarded. This files summarizes the migration from the cloudpickle test
 suite to the ``cpython`` test suite.
 
 
+.. |K| replace:: kept
+.. |P| replace:: dropped
+.. |BC| replace:: backward-compat (cloudpickle)
+.. |BP| replace:: backward-compat (python)
+
 SUMMARY TABLE:
 
-================================================================     ========
-                        test name                                     commit
-================================================================     ========
-``test_recursive_closure``                                           da4dd39_
-``test_empty_cell_preserved``                                        2f4c07d_
-``test_unhashable_closure``                                          ba23a20_
-``test_locally_defined_function_and_class``                          d86028b_
-``test_submodule_closure``                                           938fc0d_
-``test_cell_manipulation``                                           cf882c6_
-``test_builtin_function_without_module``                             3ca9d71_
-``test_module_locals_behavior``                                      51be0f9_
-``test_closure_none_is_preserved``                                   6d8ec33_
-``test_closure_interacting_with_a_global_variable``                  8eaf637_
-``test_interactively_defined_function``                              28a15b8_
-``test_abc``                                                         10491eb_
-``test_cycle_in_classdict_globals``                                  aec80d2_
-``test_faulty_module``                                               fb3a80f_
-``test_weakset_identity_preservation``                               10491eb_
-``test_classmethod``                                                 36a53c0_
-``test_dynamic_module``                                              e7341b6_
-``test_dynamic_modules_globals``                                     1d73b39_
-``test_load_dynamic_module_in_grandchild_process``                   8eaf637_
-``test_function_from_dynamic_module_with_globals_modifications``     1d73b39_
-``test_is_dynamic_module``                                           abea4e6_
-``test_builtin_type__new__``                                         f0d2011_
-``test_dynamic_pytest_module``                                       c5e6ca0_
-``test_namedtuple``                                                  28070bb_
-``test_tornado_coroutine``                                           b11d4db_
-``test_EllipsisType``                                                4df0378_
-``test_ufunc``                                                       1e91fa7_
-``test_NotImplemented``                                              e7341b6_
-``test_NotImplementedType``                                          4df0378_
-``test_itemgetter``                                                  c8d3bb1_
-``test_attrgetter``                                                  c8d3bb1_
-``test_buffer``                                                      a3e41c6_
-``test_logger``                                                      1b1e6ea_
-``test_function_pickle_compat_0_4_1``                                7d8c670_
-``test_function_pickle_compat_0_4_0``                                7d8c670_
-``test_correct_globals_import``                                      5c781be_
-``test_import``                                                      938fc0d_
-``test_nested_lambdas``                                              d86028b_
-``test_wraps_preserves_function_annotations``                        6d03ffe_
-``test_wraps_preserves_function_doc``                                aa61338_
-``test_wraps_preserves_function_name``                               33c9381_
-``test_multiprocess``                                                aec80d2_
-``test_memoryview``                                                  f8187e9_
-``test_sliced_and_non_contiguous_memoryview``                        ac9484e_
-``test_large_memoryview``                                            ac9484e_
-``test_generator``                                                   16ea169_
-``test_unhashable_function``                                         8a41060_
-``test_partial``                                                     9ad2568_
-``test_method_descriptors``                                          ce99eee_
-``test_itertools_count``                                             67c977b_
-================================================================     ========
+================================================================   ======== ======== ==========
+                        test name                                    tags    commit     gh-
+================================================================   ======== ======== ==========
+test_recursive_closure_                                             |K|     da4dd39_
+test_empty_cell_preserved_                                          |BP|    2f4c07d_
+test_unhashable_closure_                                            |BC|    ba23a20_
+test_locally_defined_function_and_class_                                    d86028b_
+test_submodule_closure_                                                     938fc0d_
+test_cell_manipulation_                                                     cf882c6_  gh-90_
+test_builtin_function_without_module_                                       3ca9d71_  gh-56_
+test_module_locals_behavior_                                                51be0f9_  gh-212_
+test_closure_none_is_preserved_                                             6d8ec33_
+test_closure_interacting_with_a_global_variable_                            8eaf637_
+test_interactively_defined_function_                                        28a15b8_
+test_abc_                                                                   10491eb_
+test_cycle_in_classdict_globals_                                            aec80d2_
+test_faulty_module_                                                         fb3a80f_  gh-136_
+test_weakset_identity_preservation_                                         10491eb_
+test_classmethod_                                                           36a53c0_  gh-41_
+test_dynamic_module_                                                        e7341b6_
+test_dynamic_modules_globals_                                               1d73b39_
+test_load_dynamic_module_in_grandchild_process_                             8eaf637_  gh-198_
+test_function_from_dynamic_module_with_globals_modifications_               1d73b39_  gh-205_
+test_is_dynamic_module_                                                     abea4e6_  gh-208_
+test_builtin_type__new___                                                   f0d2011_
+test_dynamic_pytest_module_                                                 c5e6ca0_
+test_namedtuple_                                                            28070bb_
+test_tornado_coroutine_                                                     b11d4db_
+test_EllipsisType_                                                          4df0378_
+test_ufunc_                                                                 1e91fa7_  gh-34_
+test_NotImplemented_                                                        e7341b6_  gh-52_
+test_NotImplementedType_                                                    4df0378_  gh-210_
+test_itemgetter_                                                            c8d3bb1_
+test_attrgetter_                                                            c8d3bb1_
+test_buffer_                                                                a3e41c6_
+test_logger_                                                                1b1e6ea_
+test_function_pickle_compat_0_4_1_                                          7d8c670_
+test_function_pickle_compat_0_4_0_                                          7d8c670_  gh-218_
+test_correct_globals_import_                                                5c781be_  gh-204_
+test_import_                                                                938fc0d_  gh-80_
+test_nested_lambdas_                                                        d86028b_  gh-25_
+test_wraps_preserves_function_annotations_                                  6d03ffe_  gh-177_
+test_wraps_preserves_function_doc_                                          aa61338_  gh-177_
+test_wraps_preserves_function_name_                                         33c9381_  gh-183_
+test_multiprocess_                                                          aec80d2_
+test_memoryview_                                                            f8187e9_
+test_sliced_and_non_contiguous_memoryview_                                  ac9484e_
+test_large_memoryview_                                                      ac9484e_
+test_generator_                                                             16ea169_  gh-39_
+test_unhashable_function_                                                   8a41060_  gh-145_
+test_partial_                                                               9ad2568_
+test_method_descriptors_                                                    ce99eee_
+test_itertools_count_                                                       67c977b_
+================================================================   ======== ======== ==========
 
 
 ---------------------------
 tests dealing with closures
 ---------------------------
 
+
+.. _test_recursive_closure:
 
 ``test_recursive_closure``
 --------------------------
@@ -74,6 +81,8 @@ tests dealing with closures
 * goal: canonical recursive object test
 * commit added: support recursive closure cells da4dd39_ (ref:)
 * present: yes
+
+.. _test_empty_cell_preserved:
 
 ``test_empty_cell_preserved``
 -----------------------------
@@ -84,6 +93,8 @@ tests dealing with closures
 * present: no - cells are now created in a traditional way, not by tricking the
   compiler
 
+.. _test_unhashable_closure:
+
 ``test_unhashable_closure``
 ---------------------------
 
@@ -93,34 +104,42 @@ tests dealing with closures
 * present: no - at no point is the hashability of a function's closure
   important in the current codebase.
 
+.. _test_locally_defined_function_and_class:
+
 ``test_locally_defined_function_and_class``
 -------------------------------------------
 
-* commit added: TST add tests for nested constructs d86028b_ (ref: pull_25_)
+* commit added: TST add tests for nested constructs d86028b_ (ref: gh-25_)
 * goal: test pickling-depickling of classes with references to variables in the
   closure of their methods.
 * present: currently no. Will add it if it has a clear purpose.
 
+.. _test_submodule_closure:
+
 ``test_submodule_closure``
 --------------------------
 
-* commit added: Import submodules accessed by pickled functions (#80) 938fc0d_ (ref: pull_80_)
+* commit added: Import submodules accessed by pickled functions (#80) 938fc0d_ (ref: gh-80_)
 * goal: make sure that submodules refered by attribute in a function are
   correctly serialized
 * present: yes
 
 
+.. _test_cell_manipulation:
+
 ``test_cell_manipulation``
 --------------------------
 
-* commit added: add cell manipulation helper unit tests cf882c6_ (ref: pull_90_)
+* commit added: add cell manipulation helper unit tests cf882c6_ (ref: gh-90_)
 * goal: test cell creation/value setting
 * present no: cell_contents is now writeable
+
+.. _test_builtin_function_without_module:
 
 ``test_builtin_function_without_module``
 ----------------------------------------
 
-* commit added: fix #56 3ca9d71_ (ref: pull_56_)
+* commit added: fix #56 3ca9d71_ (ref: gh-56_)
 * goal: in cloudpickle, ``builtin_function_or_method`` are dispatched
   ``save_global``. We must make sure those method are pickled using
   ``save_global`` and not ``save_function``, as builtin methods do not have a
@@ -128,15 +147,19 @@ tests dealing with closures
 * present: no. In pickle, i do not modify the dispatch table for builtin types,
   so this should go well.
 
+.. _test_module_locals_behavior:
+
 ``test_module_locals_behavior``
 -------------------------------
 
-* commit added: Fix module locals has no builtins (#212) 51be0f9_ (ref: pull_212_)
+* commit added: Fix module locals has no builtins (#212) 51be0f9_ (ref: gh-212_)
 * goal: Makes sure that a local function defined in another module is correctly
   serialized. This notably checks that the globals are accessible and that
   there is no issue with the builtins (see #211)
 * present: no, failure only on 3.4
 
+
+.. _test_closure_none_is_preserved:
 
 ``test_closure_none_is_preserved``:
 -----------------------------------
@@ -148,10 +171,12 @@ tests dealing with closures
   positive length. In addition, it is not possible to create a function with
   the wrong number of cells. So this test is probably unnecessary.
 
+.. _test_closure_interacting_with_a_global_variable:
+
 ``test_closure_interacting_with_a_global_variable``
 ---------------------------------------------------
 
-* commit added: FIX Handling of global variables by locally defined functions (#198) 8eaf637_ (ref: pull_198_)
+* commit added: FIX Handling of global variables by locally defined functions (#198) 8eaf637_ (ref: gh-198_)
 * goal: current default behavior in cloudpickle regaring global variable
   collusion is to not ovveride the existing globals of a processs when a
   function is unpickled. This test used to check this behavior for non
@@ -162,6 +187,8 @@ tests dealing with closures
 tests pickling classes
 ----------------------
 
+.. _test_interactively_defined_function:
+
 ``test_interactively_defined_function``
 ---------------------------------------
 
@@ -171,12 +198,16 @@ tests pickling classes
 * present: yes, but with no dynamic classes for now. A bunch of attribute
   preserving/result checking tests are done. Could be refactored?
 
+.. _test_abc:
+
 ``test_abc``
 ------------
 
 * commit added: BUG: Support WeakSets and ABCMeta instances. 10491eb_ (ref:)
 * goal: TBD
 * present: TBD
+
+.. _test_cycle_in_classdict_globals:
 
 ``test_cycle_in_classdict_globals``
 -----------------------------------
@@ -185,12 +216,16 @@ tests pickling classes
 * yet another circular reference test
 * present: TBD
 
+.. _test_faulty_module:
+
 ``test_faulty_module``
 ----------------------
 
-* commit added: Fix pickling classes and functions defined in a faulty module (#136) fb3a80f_ (ref: pull_136_)
+* commit added: Fix pickling classes and functions defined in a faulty module (#136) fb3a80f_ (ref: gh-136_)
 * goal: TBD
 * present: TBD
+
+.. _test_weakset_identity_preservation:
 
 ``test_weakset_identity_preservation``
 --------------------------------------
@@ -202,10 +237,12 @@ tests pickling classes
 * present: no (for now, weaksets are not picklable)
 
 
+.. _test_classmethod:
+
 ``test_classmethod``
 --------------------
 
-* commit added: Add test for classmethod pickling 36a53c0_ (ref: pull_41_)
+* commit added: Add test for classmethod pickling 36a53c0_ (ref: gh-41_)
 * goal: pickle methods decorated with static/classmethod fails because:
   temporarily dropping dynamic class pickling, because it occasionally involves
   non-empty closures
@@ -216,44 +253,54 @@ tests pickling classes
 test with dynamic modules
 -------------------------
 
+.. _test_dynamic_module:
+
 ``test_dynamic_module``
 -----------------------
 
-* commit added: Add custom logic for pickling dynamic imports. Add test cases, special case Ellipsis and NotImplemented. Use custom logic in lieu of imp.find_module to properly follow subimports. For example sklearn.tree was spuriously treated as a dynamic module. e7341b6_ (ref: pull_52_)
+* commit added: Add custom logic for pickling dynamic imports. Add test cases, special case Ellipsis and NotImplemented. Use custom logic in lieu of imp.find_module to properly follow subimports. For example sklearn.tree was spuriously treated as a dynamic module. e7341b6_ (ref: gh-52_)
 * goal: pickle a dynamic module
 * present: TBD (no dynamic module pickling yet)
 
 
+.. _test_dynamic_modules_globals:
+
 ``test_dynamic_modules_globals``
 --------------------------------
 
-* commit added: Global variables handling in dynamically defined functions.  (#205) 1d73b39_ (ref: pull_205_)
+* commit added: Global variables handling in dynamically defined functions.  (#205) 1d73b39_ (ref: gh-205_)
 * goal: test the behavior of ``dynamic_modules_globals``, which acts like
   sys.modules for dynamic modules.
 * present: TBD (no dynamic module pickling yet)
 
+.. _test_load_dynamic_module_in_grandchild_process:
+
 ``test_load_dynamic_module_in_grandchild_process``
 --------------------------------------------------
 
-* commit added: FIX Handling of global variables by locally defined functions (#198) 8eaf637_ (ref: pull_198_)
+* commit added: FIX Handling of global variables by locally defined functions (#198) 8eaf637_ (ref: gh-198_)
 * goal: Make sure that when loaded, a dynamic module preserves its dynamic
   property.
 * present: TBD (no dynamic module pickling yet)
 
+.. _test_function_from_dynamic_module_with_globals_modifications:
+
 ``test_function_from_dynamic_module_with_globals_modifications``
 ----------------------------------------------------------------
 
-* commit added: Global variables handling in dynamically defined functions.  (#205) 1d73b39_ (ref: pull_205_)
+* commit added: Global variables handling in dynamically defined functions.  (#205) 1d73b39_ (ref: gh-205_)
 * goal: make sure variables from the global namespace of the process in which a
   function from a dynamic module gets unpickled are not overriden if the
   function carries some global variables with it fails because: removed dynamic
   module support
 * present: TBD (no dynamic module pickling yet)
 
+.. _test_is_dynamic_module:
+
 ``test_is_dynamic_module``
 --------------------------
 
-* commit added: Stop using the deprecated imp module when possible (#208) abea4e6_ (ref: pull_208_)
+* commit added: Stop using the deprecated imp module when possible (#208) abea4e6_ (ref: gh-208_)
 * goal: make sure cloudpickle spots dynamic module correctly
 * present: most probably yes (to differentiate between dynamic and static
   modules, even if we do not serialize dynamic modules)
@@ -263,6 +310,8 @@ test with dynamic modules
 test with specific, isolated functionalities
 --------------------------------------------
 
+.. _test_builtin_type\_\_new\_\_:
+
 ``test_builtin_type__new__``
 ----------------------------
 
@@ -271,12 +320,16 @@ test with specific, isolated functionalities
 * present: no because for now we do not ``builtin_function_or_method`` types to
   ``save_global``
 
+.. _test_dynamic_pytest_module:
+
 ``test_dynamic_pytest_module``
 ------------------------------
 
 * commit added: Added simple test case for the issue c5e6ca0_ (ref:)
 * goal: TBD
 * present: TBD
+
+.. _test_namedtuple:
 
 ``test_namedtuple``
 -------------------
@@ -285,6 +338,8 @@ test with specific, isolated functionalities
 * goal: test pickling of namedtuples
 * present: no namedtuple support
 
+.. _test_tornado_coroutine:
+
 ``test_tornado_coroutine``
 --------------------------
 
@@ -292,48 +347,62 @@ test with specific, isolated functionalities
 * goal: test ``pickle_depickling`` a locally defined coroutine function
 * present: TBD
 
+.. _test_EllipsisType:
+
 ``test_EllipsisType``
 ---------------------
 
-* commit added: NoneType fix (#210) 4df0378_ (ref: pull_210_)
+* commit added: NoneType fix (#210) 4df0378_ (ref: gh-210_)
 * goal: pickle-depickle type(Ellipsis)
 * present: TBD
+
+.. _test_ufunc:
 
 ``test_ufunc``
 --------------
 
-* commit added: adds tests for pickling of ufuncs and removes custom ufunc code in cloudpickle 1e91fa7_ (ref: pull_34_)
+* commit added: adds tests for pickling of ufuncs and removes custom ufunc code in cloudpickle 1e91fa7_ (ref: gh-34_)
 * goal: self explaining
 * present: probably not in this form at least
+
+.. _test_NotImplemented:
 
 ``test_NotImplemented``
 -----------------------
 
-* commit added: Add custom logic for pickling dynamic imports. Add test cases, special case Ellipsis and NotImplemented. Use custom logic in lieu of imp.find_module to properly follow subimports. For example sklearn.tree was spuriously treated as a dynamic module. e7341b6_ (ref: pull_52_)
+* commit added: Add custom logic for pickling dynamic imports. Add test cases, special case Ellipsis and NotImplemented. Use custom logic in lieu of imp.find_module to properly follow subimports. For example sklearn.tree was spuriously treated as a dynamic module. e7341b6_ (ref: gh-52_)
 * goal: pickle NotImplemented
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_NotImplementedType:
 
 ``test_NotImplementedType``
 ---------------------------
 
-* commit added: NoneType fix (#210) 4df0378_ (ref: pull_210_)
+* commit added: NoneType fix (#210) 4df0378_ (ref: gh-210_)
 * goal: pickle NotImplementedType
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_itemgetter:
 
 ``test_itemgetter``
 -------------------
 
 * commit added: Adapted some spark unit tests c8d3bb1_ (ref:)
 * goal: pickle operator.itemgetter
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_attrgetter:
 
 ``test_attrgetter``
 -------------------
 
 * commit added: Adapted some spark unit tests c8d3bb1_ (ref:)
 * goal: pickle operator.attrgetter
-* present: not in this PR
+* present: not in this gh-
 
+
+.. _test_buffer:
 
 ``test_buffer``
 ---------------
@@ -342,29 +411,35 @@ test with specific, isolated functionalities
 * goal: pickle a buffer
 * present: no (skipped under python3 on cloudpickle)
 
+.. _test_logger:
+
 ``test_logger``
 ---------------
 
 * commit added: FIX pickle RootLogger 1b1e6ea_ (ref:)
 * goal: pickle a logger instance
-* present: not in this PR
+* present: not in this gh-
 
 -------------------------
 retro-compatibility tests
 -------------------------
 
+.. _test_function_pickle_compat_0_4_1:
+
 ``test_function_pickle_compat_0_4_1``
 -------------------------------------
 
-* commit added: Restore compatibility with functions pickled with 0.4.0 (#128) 7d8c670_ (ref: pull_218_)
+* commit added: Restore compatibility with functions pickled with 0.4.0 (#128) 7d8c670_ (ref: gh-218_)
 * goal: make sure cloudpickle can depickle pickle strings from 0.4.1 (Python
   2.7)
 * present: no
 
+.. _test_function_pickle_compat_0_4_0:
+
 ``test_function_pickle_compat_0_4_0``
 -------------------------------------
 
-* commit added: Restore compatibility with functions pickled with 0.4.0 (#128) 7d8c670_ (ref: pull_128_)
+* commit added: Restore compatibility with functions pickled with 0.4.0 (#128) 7d8c670_ (ref: gh-128_)
 * goal: make sure cloudpickle can depickle pickle strings from 0.4.0 (Python
   2.7)
 * present: no
@@ -374,54 +449,68 @@ retro-compatibility tests
 other tests
 -----------
 
+.. _test_correct_globals_import:
+
 ``test_correct_globals_import``
 -------------------------------
 
-* commit added: MNT Add a non regression test for function globals (#204) 5c781be_ (ref: pull_204_)
+* commit added: MNT Add a non regression test for function globals (#204) 5c781be_ (ref: gh-204_)
 * goal: checks that non-used globals are not part of the pickle string of a
   function
 * present: soon
 
 
+.. _test_import:
+
 ``test_import``
 ---------------
 
-* commit added: Import submodules accessed by pickled functions (#80) 938fc0d_ (ref: pull_80_)
+* commit added: Import submodules accessed by pickled functions (#80) 938fc0d_ (ref: gh-80_)
 * goal: according to the doc, like ``test_multiprocess`` except subpackage
   modules referenced directly
 * present: yes
 
+.. _test_nested_lambdas:
+
 ``test_nested_lambdas``
 -----------------------
 
-* commit added: TST add tests for nested constructs d86028b_ (ref: pull_25_)
+* commit added: TST add tests for nested constructs d86028b_ (ref: gh-25_)
 * goal: checks ``pickle_depickle`` on a lambda calling another lambda, both
   defined in a local scope
 * present: yes
 
+.. _test_wraps_preserves_function_annotations:
+
 ``test_wraps_preserves_function_annotations``
 ---------------------------------------------
 
-* commit added: Preserve original function's annotations with @functools.wraps #177 6d03ffe_ (ref: pull_177_)
+* commit added: Preserve original function's annotations with @functools.wraps #177 6d03ffe_ (ref: gh-177_)
 * goal: test that decorating a function using functools.wraps and the
   ``pickle_depickling`` preserves annotations
 * present: yes
 
+.. _test_wraps_preserves_function_doc:
+
 ``test_wraps_preserves_function_doc``
 -------------------------------------
 
-* commit added: Preserve original function's doc with @functools.wraps #177 aa61338_ (ref: pull_177_)
+* commit added: Preserve original function's doc with @functools.wraps #177 aa61338_ (ref: gh-177_)
 * goal: test that decorating a function using functools.wraps and the
   ``pickle_depickling`` preserves doc
 * present: yes
 
+.. _test_wraps_preserves_function_name:
+
 ``test_wraps_preserves_function_name``
 --------------------------------------
 
-* commit added: Preserve original function's name with @functools.wraps #177 33c9381_ (ref: pull_183_)
+* commit added: Preserve original function's name with @functools.wraps #177 33c9381_ (ref: gh-183_)
 * goal: test that decorating a function using functools.wraps and the
   ``pickle_depickling`` preserves name
 * present: yes
+
+.. _test_multiprocess:
 
 ``test_multiprocess``
 ---------------------
@@ -432,55 +521,73 @@ other tests
 
 ## file saving tests
 
+.. _test_closed_file:
+
 ``test_closed_file``
 --------------------
 
 * goal: TBD
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_empty_file:
 
 ``test_empty_file``
 -------------------
 
 * goal: TBD
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_pickling_special_file_handles:
 
 ``test_pickling_special_file_handles``
 --------------------------------------
 
 * goal: TBD
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_plus_mode:
 
 ``test_plus_mode``
 ------------------
 
 * goal: TBD
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_r_mode:
 
 ``test_r_mode``
 ---------------
 
 * goal: TBD
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_seek:
 
 ``test_seek``
 -------------
 
 * goal: TBD
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_w_mode:
 
 ``test_w_mode``
 ---------------
 
 * goal: TBD
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_pickling_file_handle:
 
 ``test_pickling_file_handle``
 -----------------------------
 
 * goal: TBD
-* present: not in this PR
+* present: not in this gh-
 
 # Broken tests
+
+.. _test_dynamically_generated_class_that_uses_super:
 
 ``test_dynamically_generated_class_that_uses_super``
 ----------------------------------------------------
@@ -488,42 +595,54 @@ other tests
 * commit added: BUG: Fix crash when pickling dynamic class cycles. aec80d2_ (ref:)
 * goal: test pickling-depickling of a subclass that uses super in some of its
   methods
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_memoryview:
 
 ``test_memoryview``
 -------------------
 
 * commit added: Some cleanups, fix memoryview support f8187e9_ (ref:)
 * goal: TBD
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_sliced_and_non_contiguous_memoryview:
 
 ``test_sliced_and_non_contiguous_memoryview``
 ---------------------------------------------
 
 * commit added: TST non contiguous and large memory views ac9484e_ (ref:)
 * goal: TBD
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_large_memoryview:
 
 ``test_large_memoryview``
 -------------------------
 
 * commit added: TST non contiguous and large memory views ac9484e_ (ref:)
 * goal: TBD
-* present: not in this PR
+* present: not in this gh-
+
+.. _test_generator:
 
 ``test_generator``
 ------------------
 
-* commit added: Add a test for picking/unpickling generators 16ea169_ (ref: pull_39_)
+* commit added: Add a test for picking/unpickling generators 16ea169_ (ref: gh-39_)
 * goal: TBD
 * present: yes
+
+.. _test_unhashable_function:
 
 ``test_unhashable_function``
 ----------------------------
 
-* commit added: BUG: Handle instancemethods of builtin types. 8a41060_ (ref: pull_145_)
+* commit added: BUG: Handle instancemethods of builtin types. 8a41060_ (ref: gh-145_)
 * goal: TBD
 * present: yes
+
+.. _test_partial:
 
 ``test_partial``
 ----------------
@@ -532,12 +651,16 @@ other tests
 * goal: TBD
 * present: yes
 
+.. _test_method_descriptors:
+
 ``test_method_descriptors``
 ---------------------------
 
 * commit added: Support method_descriptor ce99eee_ (ref:)
 * goal: TBD
 * present: yes
+
+.. _test_itertools_count:
 
 ``test_itertools_count``
 ------------------------
@@ -597,30 +720,24 @@ other tests
 .. _ce99eee: https://github.com/cloudpipe/cloudpickle/commit/ce99eee4bf159985018bdf50ab363408e74ac07c
 .. _67c977b: https://github.com/cloudpipe/cloudpickle/commit/67c977b89c75766be563554d1a2abd80df0b37b
 
-.. _pull_25: https://github.com/cloudpipe/cloudpickle/pull/25
-.. _pull_80: https://github.com/cloudpipe/cloudpickle/pull/80
-.. _pull_90: https://github.com/cloudpipe/cloudpickle/pull/90
-.. _pull_56: https://github.com/cloudpipe/cloudpickle/pull/56
-.. _pull_212: https://github.com/cloudpipe/cloudpickle/pull/212
-.. _pull_198: https://github.com/cloudpipe/cloudpickle/pull/198
-.. _pull_136: https://github.com/cloudpipe/cloudpickle/pull/136
-.. _pull_41: https://github.com/cloudpipe/cloudpickle/pull/41
-.. _pull_52: https://github.com/cloudpipe/cloudpickle/pull/52
-.. _pull_205: https://github.com/cloudpipe/cloudpickle/pull/205
-.. _pull_198: https://github.com/cloudpipe/cloudpickle/pull/198
-.. _pull_205: https://github.com/cloudpipe/cloudpickle/pull/205
-.. _pull_208: https://github.com/cloudpipe/cloudpickle/pull/208
-.. _pull_210: https://github.com/cloudpipe/cloudpickle/pull/210
-.. _pull_34: https://github.com/cloudpipe/cloudpickle/pull/34
-.. _pull_52: https://github.com/cloudpipe/cloudpickle/pull/52
-.. _pull_210: https://github.com/cloudpipe/cloudpickle/pull/210
-.. _pull_218: https://github.com/cloudpipe/cloudpickle/pull/218
-.. _pull_128: https://github.com/cloudpipe/cloudpickle/pull/128
-.. _pull_204: https://github.com/cloudpipe/cloudpickle/pull/204
-.. _pull_80: https://github.com/cloudpipe/cloudpickle/pull/80
-.. _pull_25: https://github.com/cloudpipe/cloudpickle/pull/25
-.. _pull_177: https://github.com/cloudpipe/cloudpickle/pull/177
-.. _pull_177: https://github.com/cloudpipe/cloudpickle/pull/177
-.. _pull_183: https://github.com/cloudpipe/cloudpickle/pull/183
-.. _pull_39: https://github.com/cloudpipe/cloudpickle/pull/39
-.. _pull_145: https://github.com/cloudpipe/cloudpickle/pull/145
+
+.. _gh-25: https://github.com/cloudpipe/cloudpickle/pull/25
+.. _gh-34: https://github.com/cloudpipe/cloudpickle/pull/34
+.. _gh-39: https://github.com/cloudpipe/cloudpickle/pull/39
+.. _gh-41: https://github.com/cloudpipe/cloudpickle/pull/41
+.. _gh-52: https://github.com/cloudpipe/cloudpickle/pull/52
+.. _gh-56: https://github.com/cloudpipe/cloudpickle/pull/56
+.. _gh-80: https://github.com/cloudpipe/cloudpickle/pull/80
+.. _gh-90: https://github.com/cloudpipe/cloudpickle/pull/90
+.. _gh-128: https://github.com/cloudpipe/cloudpickle/pull/128
+.. _gh-136: https://github.com/cloudpipe/cloudpickle/pull/136
+.. _gh-145: https://github.com/cloudpipe/cloudpickle/pull/145
+.. _gh-177: https://github.com/cloudpipe/cloudpickle/pull/177
+.. _gh-183: https://github.com/cloudpipe/cloudpickle/pull/183
+.. _gh-198: https://github.com/cloudpipe/cloudpickle/pull/198
+.. _gh-204: https://github.com/cloudpipe/cloudpickle/pull/204
+.. _gh-205: https://github.com/cloudpipe/cloudpickle/pull/205
+.. _gh-208: https://github.com/cloudpipe/cloudpickle/pull/208
+.. _gh-210: https://github.com/cloudpipe/cloudpickle/pull/210
+.. _gh-212: https://github.com/cloudpipe/cloudpickle/pull/212
+.. _gh-218: https://github.com/cloudpipe/cloudpickle/pull/218
