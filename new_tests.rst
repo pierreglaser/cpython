@@ -5,66 +5,92 @@ suite to the ``cpython`` test suite.
 
 
 .. |K| replace:: kept
-.. |P| replace:: dropped
+.. |D| replace:: dropped
 .. |BC| replace:: backward-compat (cloudpickle)
-.. |BP| replace:: backward-compat (python)
+.. |BP| replace:: backward-compat (``python <3.8``)
+.. |BPN| replace:: solved by new python internals
+.. |PU| replace:: purpose unclear
+.. |F| replace:: function pickling
+.. |N| replace:: for further PRs
+.. |CL| replace:: class pickling
+.. |R| replace:: regression test
+.. |NSTD| replace:: non-stdlib
+.. |NS| replace:: exotic objects
+
+
+.. raw:: html
+
+    <style> .red {color:red} </style>
+
+.. role:: red
+
+.. raw:: html
+
+    <style> .green {color:green} </style>
+
+.. role:: green
+
+.. |TODO| replace:: :red:`TODO`
+.. |DONE| replace:: :green:`DONE`
+
 
 SUMMARY TABLE:
 
-================================================================   ======== ======== ==========
-                        test name                                    tags    commit     gh-
-================================================================   ======== ======== ==========
-test_recursive_closure_                                             |K|     da4dd39_
-test_empty_cell_preserved_                                          |BP|    2f4c07d_
-test_unhashable_closure_                                            |BC|    ba23a20_
-test_locally_defined_function_and_class_                                    d86028b_
-test_submodule_closure_                                                     938fc0d_
-test_cell_manipulation_                                                     cf882c6_  gh-90_
-test_builtin_function_without_module_                                       3ca9d71_  gh-56_
-test_module_locals_behavior_                                                51be0f9_  gh-212_
-test_closure_none_is_preserved_                                             6d8ec33_
-test_closure_interacting_with_a_global_variable_                            8eaf637_
-test_interactively_defined_function_                                        28a15b8_
-test_abc_                                                                   10491eb_
-test_cycle_in_classdict_globals_                                            aec80d2_
-test_faulty_module_                                                         fb3a80f_  gh-136_
-test_weakset_identity_preservation_                                         10491eb_
-test_classmethod_                                                           36a53c0_  gh-41_
-test_dynamic_module_                                                        e7341b6_
-test_dynamic_modules_globals_                                               1d73b39_
-test_load_dynamic_module_in_grandchild_process_                             8eaf637_  gh-198_
-test_function_from_dynamic_module_with_globals_modifications_               1d73b39_  gh-205_
-test_is_dynamic_module_                                                     abea4e6_  gh-208_
-test_builtin_type__new___                                                   f0d2011_
-test_dynamic_pytest_module_                                                 c5e6ca0_
-test_namedtuple_                                                            28070bb_
-test_tornado_coroutine_                                                     b11d4db_
-test_EllipsisType_                                                          4df0378_
-test_ufunc_                                                                 1e91fa7_  gh-34_
-test_NotImplemented_                                                        e7341b6_  gh-52_
-test_NotImplementedType_                                                    4df0378_  gh-210_
-test_itemgetter_                                                            c8d3bb1_
-test_attrgetter_                                                            c8d3bb1_
-test_buffer_                                                                a3e41c6_
-test_logger_                                                                1b1e6ea_
-test_function_pickle_compat_0_4_1_                                          7d8c670_
-test_function_pickle_compat_0_4_0_                                          7d8c670_  gh-218_
-test_correct_globals_import_                                                5c781be_  gh-204_
-test_import_                                                                938fc0d_  gh-80_
-test_nested_lambdas_                                                        d86028b_  gh-25_
-test_wraps_preserves_function_annotations_                                  6d03ffe_  gh-177_
-test_wraps_preserves_function_doc_                                          aa61338_  gh-177_
-test_wraps_preserves_function_name_                                         33c9381_  gh-183_
-test_multiprocess_                                                          aec80d2_
-test_memoryview_                                                            f8187e9_
-test_sliced_and_non_contiguous_memoryview_                                  ac9484e_
-test_large_memoryview_                                                      ac9484e_
-test_generator_                                                             16ea169_  gh-39_
-test_unhashable_function_                                                   8a41060_  gh-145_
-test_partial_                                                               9ad2568_
-test_method_descriptors_                                                    ce99eee_
-test_itertools_count_                                                       67c977b_
-================================================================   ======== ======== ==========
+================================================ =========== ======== ======== ======== ========
+                        test name                purpose     future   status   commit     PR
+                                                             presence
+================================================ =========== ======== ======== ======== ========
+test_unhashable_closure_                          |BC|        |D|     |DONE|   ba23a20_
+test_builtin_function_without_module_             |BPN|       |D|     |DONE|   3ca9d71_  gh-56_
+test_builtin_type__new_\__                        |BPN|       |D|     |DONE|   f0d2011_
+test_module_locals_behavior_                      |BP|        |D|     |DONE|   51be0f9_  gh-212_
+test_itertools_count_                             |BP|        |D|     |DONE|   67c977b_
+test_function_pickle_compat_0_4_1_                |BP|        |D|     |DONE|   7d8c670_
+test_function_pickle_compat_0_4_0_                |BP|        |D|     |DONE|   7d8c670_  gh-218_
+test_buffer_                                      |BP|        |D|     |DONE|   a3e41c6_
+test_method_descriptors_                          |BP|        |D|     |DONE|   ce99eee_
+test_cell_manipulation_                           |BP|        |D|     |DONE|   cf882c6_  gh-90_
+test_abc_                                         |CL|        |N|     |TODO|   10491eb_
+test_classmethod_                                 |CL|        |N|     |TODO|   36a53c0_  gh-41_
+test_cycle_in_classdict_globals_                  |CL|        |N|     |TODO|   aec80d2_
+test_itemgetter_                                  |CL|        |N|     |TODO|   c8d3bb1_
+test_attrgetter_                                  |CL|        |N|     |TODO|   c8d3bb1_
+test_interactively_defined_function_              |F|         |K|     |DONE|   28a15b8_
+test_submodule_closure_                           |F|         |K|     |DONE|   938fc0d_  gh-80_
+test_recursive_closure_                           |F|         |K|     |DONE|   da4dd39_
+test_empty_cell_preserved_                        |F|         |K|     |TODO|   2f4c07d_
+test_wraps_preserves_function_name_               |F|         |K|     |TODO|   33c9381_  gh-183_
+test_correct_globals_import_                      |F|         |K|     |TODO|   5c781be_  gh-204_
+test_wraps_preserves_function_annotations_        |F|         |K|     |TODO|   6d03ffe_  gh-177_
+test_unhashable_function_                         |F|         |K|     |TODO|   8a41060_  gh-145_
+test_partial_                                     |F|         |K|     |TODO|   9ad2568_
+test_wraps_preserves_function_doc_                |F|         |K|     |TODO|   aa61338_  gh-177_
+test_multiprocess_                                |F|         |K|     |TODO|   aec80d2_
+test_faulty_module_                               |F|         |K|     |TODO|   fb3a80f_  gh-136_
+test_dynamic_pytest_module_                       |NSTD|      |D|     |DONE|   c5e6ca0_
+test_tornado_coroutine_                           |NSTD|      |N|     |TODO|   b11d4db_
+test_closure_interacting_with_a_global_variable_  |NS|        |K|     |TODO|   8eaf637_
+test_weakset_identity_preservation_               |NS|        |N|     |TODO|   10491eb_
+test_generator_                                   |NS|        |N|     |TODO|   16ea169_  gh-39_
+test_logger_                                      |NS|        |N|     |TODO|   1b1e6ea_
+test_dynamic_modules_globals_                     |NS|        |N|     |TODO|   1d73b39_
+test_function_from_dynamic_module_                |NS|        |N|     |TODO|   1d73b39_  gh-205_
+test_ufunc_                                       |NS|        |N|     |TODO|   1e91fa7_  gh-34_
+test_namedtuple_                                  |NS|        |N|     |TODO|   28070bb_
+test_EllipsisType_                                |NS|        |N|     |TODO|   4df0378_
+test_NotImplementedType_                          |NS|        |N|     |TODO|   4df0378_  gh-210_
+test_load_dynamic_module_in_grandchild_process_   |NS|        |N|     |TODO|   8eaf637_  gh-198_
+test_is_dynamic_module_                           |NS|        |N|     |TODO|   abea4e6_  gh-208_
+test_sliced_and_non_contiguous_memoryview_        |NS|        |N|     |TODO|   ac9484e_
+test_large_memoryview_                            |NS|        |N|     |TODO|   ac9484e_
+test_dynamic_module_                              |NS|        |N|     |TODO|   e7341b6_
+test_NotImplemented_                              |NS|        |N|     |TODO|   e7341b6_  gh-52_
+test_memoryview_                                  |NS|        |N|     |TODO|   f8187e9_
+test_closure_none_is_preserved_                   |PU|        |D|     |DONE|   6d8ec33_
+test_import_                                      |PU|        |K|     |TODO|   938fc0d_  gh-80_
+test_locally_defined_function_and_class_          |PU|        |K|     |TODO|   d86028b_  gh-25_
+test_nested_lambdas_                              |PU|        |K|     |TODO|   d86028b_  gh-25_
+================================================ =========== ======== ======== ======== ========
 
 
 ---------------------------
@@ -283,7 +309,7 @@ test with dynamic modules
   property.
 * present: TBD (no dynamic module pickling yet)
 
-.. _test_function_from_dynamic_module_with_globals_modifications:
+.. _test_function_from_dynamic_module:
 
 ``test_function_from_dynamic_module_with_globals_modifications``
 ----------------------------------------------------------------
@@ -310,7 +336,7 @@ test with dynamic modules
 test with specific, isolated functionalities
 --------------------------------------------
 
-.. _test_builtin_type\_\_new\_\_:
+.. _test_builtin_type__new__:
 
 ``test_builtin_type__new__``
 ----------------------------
