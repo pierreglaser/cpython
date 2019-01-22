@@ -1,9 +1,3 @@
-Serializing dyamic objects was the purpose of the ``cloudpickle`` module,
-therefore most of its test suite was migrated. Some tests were refactored or
-simply discarded. This files summarizes the migration from the cloudpickle test
-suite to the ``cpython`` test suite.
-
-
 .. |K| replace:: kept
 .. |D| replace:: dropped
 .. |BC| replace:: backward-compat (cloudpickle)
@@ -33,76 +27,154 @@ suite to the ``cpython`` test suite.
 .. |TODO| replace:: :red:`TODO`
 .. |DONE| replace:: :green:`DONE`
 
-
-SUMMARY TABLE:
-
-================================================ =========== ======== ======== ======== ========
-                        test name                purpose     future   status   commit     PR
-                                                             presence
-================================================ =========== ======== ======== ======== ========
-test_unhashable_closure_                          |BC|        |D|     |DONE|   ba23a20_
-test_builtin_function_without_module_             |BPN|       |D|     |DONE|   3ca9d71_  gh-56_
-test_builtin_type__new_\__                        |BPN|       |D|     |DONE|   f0d2011_
-test_module_locals_behavior_                      |BP|        |D|     |DONE|   51be0f9_  gh-212_
-test_itertools_count_                             |BP|        |D|     |DONE|   67c977b_
-test_function_pickle_compat_0_4_1_                |BP|        |D|     |DONE|   7d8c670_
-test_function_pickle_compat_0_4_0_                |BP|        |D|     |DONE|   7d8c670_  gh-218_
-test_buffer_                                      |BP|        |D|     |DONE|   a3e41c6_
-test_method_descriptors_                          |BP|        |D|     |DONE|   ce99eee_
-test_cell_manipulation_                           |BP|        |D|     |DONE|   cf882c6_  gh-90_
-test_abc_                                         |CL|        |N|     |TODO|   10491eb_
-test_classmethod_                                 |CL|        |N|     |TODO|   36a53c0_  gh-41_
-test_cycle_in_classdict_globals_                  |CL|        |N|     |TODO|   aec80d2_
-test_itemgetter_                                  |CL|        |N|     |TODO|   c8d3bb1_
-test_attrgetter_                                  |CL|        |N|     |TODO|   c8d3bb1_
-test_interactively_defined_function_              |F|         |K|     |DONE|   28a15b8_
-test_submodule_closure_                           |F|         |K|     |DONE|   938fc0d_  gh-80_
-test_recursive_closure_                           |F|         |K|     |DONE|   da4dd39_
-test_empty_cell_preserved_                        |F|         |K|     |TODO|   2f4c07d_
-test_wraps_preserves_function_name_               |F|         |K|     |TODO|   33c9381_  gh-183_
-test_correct_globals_import_                      |F|         |K|     |TODO|   5c781be_  gh-204_
-test_wraps_preserves_function_annotations_        |F|         |K|     |TODO|   6d03ffe_  gh-177_
-test_unhashable_function_                         |F|         |K|     |TODO|   8a41060_  gh-145_
-test_partial_                                     |F|         |K|     |TODO|   9ad2568_
-test_wraps_preserves_function_doc_                |F|         |K|     |TODO|   aa61338_  gh-177_
-test_multiprocess_                                |F|         |K|     |TODO|   aec80d2_
-test_faulty_module_                               |F|         |K|     |TODO|   fb3a80f_  gh-136_
-test_dynamic_pytest_module_                       |NSTD|      |D|     |DONE|   c5e6ca0_
-test_tornado_coroutine_                           |NSTD|      |N|     |TODO|   b11d4db_
-test_closure_interacting_with_a_global_variable_  |NS|        |K|     |TODO|   8eaf637_
-test_weakset_identity_preservation_               |NS|        |N|     |TODO|   10491eb_
-test_generator_                                   |NS|        |N|     |TODO|   16ea169_  gh-39_
-test_logger_                                      |NS|        |N|     |TODO|   1b1e6ea_
-test_dynamic_modules_globals_                     |NS|        |N|     |TODO|   1d73b39_
-test_function_from_dynamic_module_                |NS|        |N|     |TODO|   1d73b39_  gh-205_
-test_ufunc_                                       |NS|        |N|     |TODO|   1e91fa7_  gh-34_
-test_namedtuple_                                  |NS|        |N|     |TODO|   28070bb_
-test_EllipsisType_                                |NS|        |N|     |TODO|   4df0378_
-test_NotImplementedType_                          |NS|        |N|     |TODO|   4df0378_  gh-210_
-test_load_dynamic_module_in_grandchild_process_   |NS|        |N|     |TODO|   8eaf637_  gh-198_
-test_is_dynamic_module_                           |NS|        |N|     |TODO|   abea4e6_  gh-208_
-test_sliced_and_non_contiguous_memoryview_        |NS|        |N|     |TODO|   ac9484e_
-test_large_memoryview_                            |NS|        |N|     |TODO|   ac9484e_
-test_dynamic_module_                              |NS|        |N|     |TODO|   e7341b6_
-test_NotImplemented_                              |NS|        |N|     |TODO|   e7341b6_  gh-52_
-test_memoryview_                                  |NS|        |N|     |TODO|   f8187e9_
-test_closure_none_is_preserved_                   |PU|        |D|     |DONE|   6d8ec33_
-test_import_                                      |PU|        |K|     |TODO|   938fc0d_  gh-80_
-test_locally_defined_function_and_class_          |PU|        |K|     |TODO|   d86028b_  gh-25_
-test_nested_lambdas_                              |PU|        |K|     |TODO|   d86028b_  gh-25_
-================================================ =========== ======== ======== ======== ========
+Serializing dyamic objects was the purpose of the ``cloudpickle`` module,
+therefore most of its test suite was migrated. Some tests were refactored or
+simply discarded. This files summarizes the migration from the cloudpickle test
+suite to the ``cpython`` test suite.
 
 
----------------------------
+.. contents::
+   :depth: 2
+
+Rationale
+=========
+
+Functions and Classes are currently pickled by picklikng their attribute path
+string:
+
+.. code:: python
+
+   >>> from os import makedirs
+   >>> import pickletools
+   >>> import pickle
+   >>> pickletools.dis(pickle.dumps(makedirs, protocol=4))
+       0: \x80 PROTO      4
+       2: \x95 FRAME      19
+      11: \x8c SHORT_BINUNICODE 'os'
+      15: \x94 MEMOIZE    (as 0)
+      16: \x8c SHORT_BINUNICODE 'makedirs'
+      26: \x94 MEMOIZE    (as 1)
+      27: \x93 STACK_GLOBAL
+      28: \x94 MEMOIZE    (as 2)
+      29: .    STOP
+   highest protocol among opcodes = 4
+
+the ``STACK_GLOBAL`` opcode, at index 27, *pushes a module.attr object on the
+stack*.
+When saving a pickle function on a disk, and loading it in a new
+python session, the only code executed will be the equivalent of ``from module
+import attr``.
+The limitations of this implementation is not all functions can be retrieved in
+a fresh new session, trying to load the pickled object will raise an
+``AttributeError``. Such situation can happen:
+
+
+.. code:: python
+
+   >>> def f():
+           pass
+
+Proposal
+========
+
+This PR proposes an enhancement of the pickle implementation in ``cpython``,
+both in ``Modules/_pickle.c`` and ``Lib/pickle.py``, in order to support the
+serialization of dynamically nested and defined functions.
+
+Limitations
+===========
+
+there remains a couple limiations
+
+globals
+-------
+
+globals overriding
+
+
+Discussion
+==========
+
+for now, the implementation relies upon objects such as cell, function and code
+being added to the builtin namespace. There exists alternatives to that:
+
+alternatives to new names in the builtin namespace
+--------------------------------------------------
+
+* creating helper functions
+
+
+Test suite transfer from cloudpickle
+====================================
+
+
+summary table
+-------------
+=========================================== =========== ======== ======== ======== ========
+                        test name           purpose     future   status   commit     PR
+                                                        presence
+=========================================== =========== ======== ======== ======== ========
+test_unhashable_closure_                     |BC|        |D|     |DONE|   ba23a20_
+test_builtin_function_without_module_        |BPN|       |D|     |DONE|   3ca9d71_  gh-56_
+test_builtin_type__new_\__                   |BPN|       |D|     |DONE|   f0d2011_
+test_module_locals_behavior_                 |BP|        |D|     |DONE|   51be0f9_  gh-212_
+test_itertools_count_                        |BP|        |D|     |DONE|   67c977b_
+test_function_pickle_compat_0_4_1_           |BP|        |D|     |DONE|   7d8c670_
+test_function_pickle_compat_0_4_0_           |BP|        |D|     |DONE|   7d8c670_  gh-218_
+test_buffer_                                 |BP|        |D|     |DONE|   a3e41c6_
+test_method_descriptors_                     |BP|        |D|     |DONE|   ce99eee_
+test_cell_manipulation_                      |BP|        |D|     |DONE|   cf882c6_  gh-90_
+test_abc_                                    |CL|        |N|     |TODO|   10491eb_
+test_classmethod_                            |CL|        |N|     |TODO|   36a53c0_  gh-41_
+test_cycle_in_classdict_globals_             |CL|        |N|     |TODO|   aec80d2_
+test_itemgetter_                             |CL|        |N|     |TODO|   c8d3bb1_
+test_attrgetter_                             |CL|        |N|     |TODO|   c8d3bb1_
+test_interactively_defined_function_         |F|         |K|     |DONE|   28a15b8_
+test_submodule_closure_                      |F|         |K|     |DONE|   938fc0d_  gh-80_
+test_recursive_closure_                      |F|         |K|     |DONE|   da4dd39_
+test_empty_cell_preserved_                   |F|         |K|     |TODO|   2f4c07d_
+test_wraps_preserves_function_name_          |F|         |K|     |TODO|   33c9381_  gh-183_
+test_correct_globals_import_                 |F|         |K|     |TODO|   5c781be_  gh-204_
+test_wraps_preserves_function_annotations_   |F|         |K|     |TODO|   6d03ffe_  gh-177_
+test_unhashable_function_                    |F|         |K|     |TODO|   8a41060_  gh-145_
+test_partial_                                |F|         |K|     |TODO|   9ad2568_
+test_wraps_preserves_function_doc_           |F|         |K|     |TODO|   aa61338_  gh-177_
+test_multiprocess_                           |F|         |K|     |TODO|   aec80d2_
+test_faulty_module_                          |F|         |K|     |TODO|   fb3a80f_  gh-136_
+test_dynamic_pytest_module_                  |NSTD|      |D|     |DONE|   c5e6ca0_
+test_tornado_coroutine_                      |NSTD|      |N|     |TODO|   b11d4db_
+test_closure_interacting_                    |NS|        |K|     |TODO|   8eaf637_
+test_weakset_identity_preservation_          |NS|        |N|     |TODO|   10491eb_
+test_generator_                              |NS|        |N|     |TODO|   16ea169_  gh-39_
+test_logger_                                 |NS|        |N|     |TODO|   1b1e6ea_
+test_dynamic_modules_globals_                |NS|        |N|     |TODO|   1d73b39_
+test_function_from_dynamic_module_           |NS|        |N|     |TODO|   1d73b39_  gh-205_
+test_ufunc_                                  |NS|        |N|     |TODO|   1e91fa7_  gh-34_
+test_namedtuple_                             |NS|        |N|     |TODO|   28070bb_
+test_EllipsisType_                           |NS|        |N|     |TODO|   4df0378_
+test_NotImplementedType_                     |NS|        |N|     |TODO|   4df0378_  gh-210_
+test_load_dynamic_module_                    |NS|        |N|     |TODO|   8eaf637_  gh-198_
+test_is_dynamic_module_                      |NS|        |N|     |TODO|   abea4e6_  gh-208_
+test_sliced_and_non_contiguous_memoryview_   |NS|        |N|     |TODO|   ac9484e_
+test_large_memoryview_                       |NS|        |N|     |TODO|   ac9484e_
+test_dynamic_module_                         |NS|        |N|     |TODO|   e7341b6_
+test_NotImplemented_                         |NS|        |N|     |TODO|   e7341b6_  gh-52_
+test_memoryview_                             |NS|        |N|     |TODO|   f8187e9_
+test_closure_none_is_preserved_              |PU|        |D|     |DONE|   6d8ec33_
+test_import_                                 |PU|        |K|     |TODO|   938fc0d_  gh-80_
+test_locally_defined_function_and_class_     |PU|        |K|     |TODO|   d86028b_  gh-25_
+test_nested_lambdas_                         |PU|        |K|     |TODO|   d86028b_  gh-25_
+=========================================== =========== ======== ======== ======== ========
+
+
 tests dealing with closures
 ---------------------------
 
-
 .. _test_recursive_closure:
 
+--------------------------
 ``test_recursive_closure``
 --------------------------
-
 
 * goal: canonical recursive object test
 * commit added: support recursive closure cells da4dd39_ (ref:)
@@ -110,6 +182,7 @@ tests dealing with closures
 
 .. _test_empty_cell_preserved:
 
+-----------------------------
 ``test_empty_cell_preserved``
 -----------------------------
 
@@ -121,6 +194,7 @@ tests dealing with closures
 
 .. _test_unhashable_closure:
 
+---------------------------
 ``test_unhashable_closure``
 ---------------------------
 
@@ -132,6 +206,7 @@ tests dealing with closures
 
 .. _test_locally_defined_function_and_class:
 
+-------------------------------------------
 ``test_locally_defined_function_and_class``
 -------------------------------------------
 
@@ -142,6 +217,7 @@ tests dealing with closures
 
 .. _test_submodule_closure:
 
+--------------------------
 ``test_submodule_closure``
 --------------------------
 
@@ -153,6 +229,7 @@ tests dealing with closures
 
 .. _test_cell_manipulation:
 
+--------------------------
 ``test_cell_manipulation``
 --------------------------
 
@@ -162,6 +239,7 @@ tests dealing with closures
 
 .. _test_builtin_function_without_module:
 
+----------------------------------------
 ``test_builtin_function_without_module``
 ----------------------------------------
 
@@ -175,6 +253,7 @@ tests dealing with closures
 
 .. _test_module_locals_behavior:
 
+-------------------------------
 ``test_module_locals_behavior``
 -------------------------------
 
@@ -187,6 +266,7 @@ tests dealing with closures
 
 .. _test_closure_none_is_preserved:
 
+-----------------------------------
 ``test_closure_none_is_preserved``:
 -----------------------------------
 
@@ -197,8 +277,9 @@ tests dealing with closures
   positive length. In addition, it is not possible to create a function with
   the wrong number of cells. So this test is probably unnecessary.
 
-.. _test_closure_interacting_with_a_global_variable:
+.. _test_closure_interacting:
 
+---------------------------------------------------
 ``test_closure_interacting_with_a_global_variable``
 ---------------------------------------------------
 
@@ -209,12 +290,12 @@ tests dealing with closures
   ``__main__`` modules.
 * present: yes, but switch behavior to override globals
 
-----------------------
 tests pickling classes
 ----------------------
 
 .. _test_interactively_defined_function:
 
+---------------------------------------
 ``test_interactively_defined_function``
 ---------------------------------------
 
@@ -226,6 +307,7 @@ tests pickling classes
 
 .. _test_abc:
 
+------------
 ``test_abc``
 ------------
 
@@ -235,6 +317,7 @@ tests pickling classes
 
 .. _test_cycle_in_classdict_globals:
 
+-----------------------------------
 ``test_cycle_in_classdict_globals``
 -----------------------------------
 
@@ -244,6 +327,7 @@ tests pickling classes
 
 .. _test_faulty_module:
 
+----------------------
 ``test_faulty_module``
 ----------------------
 
@@ -253,6 +337,7 @@ tests pickling classes
 
 .. _test_weakset_identity_preservation:
 
+--------------------------------------
 ``test_weakset_identity_preservation``
 --------------------------------------
 
@@ -265,6 +350,7 @@ tests pickling classes
 
 .. _test_classmethod:
 
+--------------------
 ``test_classmethod``
 --------------------
 
@@ -281,6 +367,7 @@ test with dynamic modules
 
 .. _test_dynamic_module:
 
+-----------------------
 ``test_dynamic_module``
 -----------------------
 
@@ -291,6 +378,7 @@ test with dynamic modules
 
 .. _test_dynamic_modules_globals:
 
+--------------------------------
 ``test_dynamic_modules_globals``
 --------------------------------
 
@@ -299,8 +387,9 @@ test with dynamic modules
   sys.modules for dynamic modules.
 * present: TBD (no dynamic module pickling yet)
 
-.. _test_load_dynamic_module_in_grandchild_process:
+.. _test_load_dynamic_module:
 
+--------------------------------------------------
 ``test_load_dynamic_module_in_grandchild_process``
 --------------------------------------------------
 
@@ -311,6 +400,7 @@ test with dynamic modules
 
 .. _test_function_from_dynamic_module:
 
+----------------------------------------------------------------
 ``test_function_from_dynamic_module_with_globals_modifications``
 ----------------------------------------------------------------
 
@@ -323,6 +413,7 @@ test with dynamic modules
 
 .. _test_is_dynamic_module:
 
+--------------------------
 ``test_is_dynamic_module``
 --------------------------
 
@@ -332,12 +423,12 @@ test with dynamic modules
   modules, even if we do not serialize dynamic modules)
 
 
---------------------------------------------
 test with specific, isolated functionalities
 --------------------------------------------
 
 .. _test_builtin_type__new__:
 
+----------------------------
 ``test_builtin_type__new__``
 ----------------------------
 
@@ -348,6 +439,7 @@ test with specific, isolated functionalities
 
 .. _test_dynamic_pytest_module:
 
+------------------------------
 ``test_dynamic_pytest_module``
 ------------------------------
 
@@ -357,6 +449,7 @@ test with specific, isolated functionalities
 
 .. _test_namedtuple:
 
+-------------------
 ``test_namedtuple``
 -------------------
 
@@ -366,6 +459,7 @@ test with specific, isolated functionalities
 
 .. _test_tornado_coroutine:
 
+--------------------------
 ``test_tornado_coroutine``
 --------------------------
 
@@ -375,6 +469,7 @@ test with specific, isolated functionalities
 
 .. _test_EllipsisType:
 
+---------------------
 ``test_EllipsisType``
 ---------------------
 
@@ -384,6 +479,7 @@ test with specific, isolated functionalities
 
 .. _test_ufunc:
 
+--------------
 ``test_ufunc``
 --------------
 
@@ -393,6 +489,7 @@ test with specific, isolated functionalities
 
 .. _test_NotImplemented:
 
+-----------------------
 ``test_NotImplemented``
 -----------------------
 
@@ -402,6 +499,7 @@ test with specific, isolated functionalities
 
 .. _test_NotImplementedType:
 
+---------------------------
 ``test_NotImplementedType``
 ---------------------------
 
@@ -411,6 +509,7 @@ test with specific, isolated functionalities
 
 .. _test_itemgetter:
 
+-------------------
 ``test_itemgetter``
 -------------------
 
@@ -420,6 +519,7 @@ test with specific, isolated functionalities
 
 .. _test_attrgetter:
 
+-------------------
 ``test_attrgetter``
 -------------------
 
@@ -430,6 +530,7 @@ test with specific, isolated functionalities
 
 .. _test_buffer:
 
+---------------
 ``test_buffer``
 ---------------
 
@@ -439,6 +540,7 @@ test with specific, isolated functionalities
 
 .. _test_logger:
 
+---------------
 ``test_logger``
 ---------------
 
@@ -446,12 +548,12 @@ test with specific, isolated functionalities
 * goal: pickle a logger instance
 * present: not in this gh-
 
--------------------------
 retro-compatibility tests
 -------------------------
 
 .. _test_function_pickle_compat_0_4_1:
 
+-------------------------------------
 ``test_function_pickle_compat_0_4_1``
 -------------------------------------
 
@@ -462,6 +564,7 @@ retro-compatibility tests
 
 .. _test_function_pickle_compat_0_4_0:
 
+-------------------------------------
 ``test_function_pickle_compat_0_4_0``
 -------------------------------------
 
@@ -471,12 +574,12 @@ retro-compatibility tests
 * present: no
 
 
------------
 other tests
 -----------
 
 .. _test_correct_globals_import:
 
+-------------------------------
 ``test_correct_globals_import``
 -------------------------------
 
@@ -488,6 +591,7 @@ other tests
 
 .. _test_import:
 
+---------------
 ``test_import``
 ---------------
 
@@ -498,6 +602,7 @@ other tests
 
 .. _test_nested_lambdas:
 
+-----------------------
 ``test_nested_lambdas``
 -----------------------
 
@@ -508,6 +613,7 @@ other tests
 
 .. _test_wraps_preserves_function_annotations:
 
+---------------------------------------------
 ``test_wraps_preserves_function_annotations``
 ---------------------------------------------
 
@@ -518,6 +624,7 @@ other tests
 
 .. _test_wraps_preserves_function_doc:
 
+-------------------------------------
 ``test_wraps_preserves_function_doc``
 -------------------------------------
 
@@ -528,6 +635,7 @@ other tests
 
 .. _test_wraps_preserves_function_name:
 
+--------------------------------------
 ``test_wraps_preserves_function_name``
 --------------------------------------
 
@@ -538,6 +646,7 @@ other tests
 
 .. _test_multiprocess:
 
+---------------------
 ``test_multiprocess``
 ---------------------
 
@@ -549,6 +658,7 @@ other tests
 
 .. _test_closed_file:
 
+--------------------
 ``test_closed_file``
 --------------------
 
@@ -557,6 +667,7 @@ other tests
 
 .. _test_empty_file:
 
+-------------------
 ``test_empty_file``
 -------------------
 
@@ -565,6 +676,7 @@ other tests
 
 .. _test_pickling_special_file_handles:
 
+--------------------------------------
 ``test_pickling_special_file_handles``
 --------------------------------------
 
@@ -573,6 +685,7 @@ other tests
 
 .. _test_plus_mode:
 
+------------------
 ``test_plus_mode``
 ------------------
 
@@ -581,6 +694,7 @@ other tests
 
 .. _test_r_mode:
 
+---------------
 ``test_r_mode``
 ---------------
 
@@ -589,6 +703,7 @@ other tests
 
 .. _test_seek:
 
+-------------
 ``test_seek``
 -------------
 
@@ -597,6 +712,7 @@ other tests
 
 .. _test_w_mode:
 
+---------------
 ``test_w_mode``
 ---------------
 
@@ -605,6 +721,7 @@ other tests
 
 .. _test_pickling_file_handle:
 
+-----------------------------
 ``test_pickling_file_handle``
 -----------------------------
 
@@ -615,6 +732,7 @@ other tests
 
 .. _test_dynamically_generated_class_that_uses_super:
 
+----------------------------------------------------
 ``test_dynamically_generated_class_that_uses_super``
 ----------------------------------------------------
 
@@ -625,6 +743,7 @@ other tests
 
 .. _test_memoryview:
 
+-------------------
 ``test_memoryview``
 -------------------
 
@@ -634,6 +753,7 @@ other tests
 
 .. _test_sliced_and_non_contiguous_memoryview:
 
+---------------------------------------------
 ``test_sliced_and_non_contiguous_memoryview``
 ---------------------------------------------
 
@@ -643,6 +763,7 @@ other tests
 
 .. _test_large_memoryview:
 
+-------------------------
 ``test_large_memoryview``
 -------------------------
 
@@ -652,6 +773,7 @@ other tests
 
 .. _test_generator:
 
+------------------
 ``test_generator``
 ------------------
 
@@ -661,6 +783,7 @@ other tests
 
 .. _test_unhashable_function:
 
+----------------------------
 ``test_unhashable_function``
 ----------------------------
 
@@ -670,6 +793,7 @@ other tests
 
 .. _test_partial:
 
+----------------
 ``test_partial``
 ----------------
 
@@ -679,6 +803,7 @@ other tests
 
 .. _test_method_descriptors:
 
+---------------------------
 ``test_method_descriptors``
 ---------------------------
 
@@ -688,6 +813,7 @@ other tests
 
 .. _test_itertools_count:
 
+------------------------
 ``test_itertools_count``
 ------------------------
 
