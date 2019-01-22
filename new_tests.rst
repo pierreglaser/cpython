@@ -1,3 +1,8 @@
+=======================================
+Interactively defined function pickling
+=======================================
+
+
 .. |K| replace:: kept
 .. |D| replace:: dropped
 .. |BC| replace:: backward-compat (cloudpickle)
@@ -27,20 +32,22 @@
 .. |TODO| replace:: :red:`TODO`
 .. |DONE| replace:: :green:`DONE`
 
-Serializing dyamic objects was the purpose of the ``cloudpickle`` module,
-therefore most of its test suite was migrated. Some tests were refactored or
-simply discarded. This files summarizes the migration from the cloudpickle test
-suite to the ``cpython`` test suite.
-
-
 .. contents::
-   :depth: 2
+   :depth: 1
+
+Abstract
+========
+
+This PR proposes an extension of the pickle implentation to allow for the
+serialization of nested and interactively-defined functions.
 
 Rationale
 =========
 
-Functions and Classes are currently pickled by picklikng their attribute path
-string:
+In python, the pickle protocol, and its associated implentation, allows for the
+serialization of many python objects and data structures, among which the
+ubiqutous functions [#functions]_ and and classes [#classes]_. The latter two
+are currently pickled using their attribute path string:
 
 .. code:: python
 
@@ -61,25 +68,60 @@ string:
 
 the ``STACK_GLOBAL`` opcode, at index 27, *pushes a module.attr object on the
 stack*.
-When saving a pickle function on a disk, and loading it in a new
-python session, the only code executed will be the equivalent of ``from module
-import attr``.
-The limitations of this implementation is not all functions can be retrieved in
-a fresh new session, trying to load the pickled object will raise an
-``AttributeError``. Such situation can happen:
 
+.. topic:: Note: restricting the discussion to functions
 
-.. code:: python
+   Dynamic functions and classes serialization share the same stakes for the
+   end user, as well as some implementation details in the way they will be
+   pickled in the future.  However, if classess rely on functions, the opposite
+   is not true. Therefore, it is reasonable to start with an *atomic* PR about
+   dynamic function pickling, and, further on, extend with little effort, the
+   new serialization functionalities to classes. From now on, the discussion in
+   this PR will only focus on functions, and not classes.
 
-   >>> def f():
-           pass
+When saving a pickle function ``func`` from a module ``module`` on a disk, and
+loading it in a new python session, the only code executed will be the
+equivalent of ``from module import func``.
+The limitations of this implementation is not all functions can be found this
+way. Notable exceptions include:
+
+* ``lambda`` functions
+* functions defined in a nested scope
+* functions defined in an interactive session (i.e in the ``__main__`` module)
+
+lambdas and nested functions cannot be accessed as attributes to a module,
+whereas pickle expects them to be. As for interactively defined functions, they
+will be only accessible to the interepreter in which they have been created.
+Indeed, interpreters do not share their ``__main__`` module.
+
+The latter case is particularly interesting. The data science ecosystem has
+seen the eclosion of two independant phenomenon:
+
+* Interactive sessions have been leveraged by projects such as jupyter
+  [#jupyter]_ to accelarate iterative developement and data exploration.
+* As the amount of accessible data and the capacity of computer grows, a lot of
+  effort has been invested to improve multi-process and multi-machine computing
+  in python. Serialization constitutes a key step in multi-processing at it is
+  required to communicate data between the different nodes.
+
+Combining these two trends, we get an increasing need to serialize properly
+interactively defined functions. Several communities [#pyspark]_ [#rayproject]_
+[#sklearn]_ joined forces to build and maintain a package extending pickle
+functionalities. However, its pure python implementation makes it slow to
+pickle large data structures, especially ``lists`` and ``dicts``.
 
 Proposal
 ========
 
 This PR proposes an enhancement of the pickle implementation in ``cpython``,
 both in ``Modules/_pickle.c`` and ``Lib/pickle.py``, in order to support the
-serialization of dynamically nested and defined functions.
+serialization of dynamically defined and nested functions.
+
+The conceptual change in the serialization process is non-negligible: the
+philosophy behind the current pickle implementation is to prevent malicious
+code execution by only allowing for the serialization of already-persisteent
+functions, i.e functions defined in the top level of an accessible python
+module
 
 Limitations
 ===========
@@ -106,6 +148,13 @@ alternatives to new names in the builtin namespace
 
 Test suite transfer from cloudpickle
 ====================================
+
+Serializing dyamic objects was the purpose of the ``cloudpickle`` module,
+therefore most of its test suite was migrated. Some tests were refactored or
+simply discarded. This files summarizes the migration from the cloudpickle test
+suite to the ``cpython`` test suite.
+
+
 
 
 summary table
@@ -893,3 +942,17 @@ other tests
 .. _gh-210: https://github.com/cloudpipe/cloudpickle/pull/210
 .. _gh-212: https://github.com/cloudpipe/cloudpickle/pull/212
 .. _gh-218: https://github.com/cloudpipe/cloudpickle/pull/218
+
+.. rubric:: Footnotes
+
+.. [#functions] `Python 3 functions documentation <https://docs.python.org/3/library/stdtypes.html#functions>`_
+
+.. [#classes] `Python 3 classes documentation <https://docs.python.org/3/tutorial/classes.html>`_
+
+.. [#jupyter] `Project Jupyter official website <https://jupyter.org/>`_
+
+.. [#pyspark] `Pyspark documentation website <http://spark.apache.org/docs/2.2.0/api/python/pyspark.html>`_
+
+.. [#rayproject] `Ray project github repository <https://github.com/ray-project/ray>`_
+
+.. [#sklearn]  `scikit-learn official website <https://scikit-learn.org/stable/>`_
