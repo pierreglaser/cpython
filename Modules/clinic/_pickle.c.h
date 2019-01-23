@@ -2,6 +2,40 @@
 preserve
 [clinic start generated code]*/
 
+PyDoc_STRVAR(_pickle__make_skel_func__doc__,
+"_make_skel_func($module, code, base_globals, /)\n"
+"--\n"
+"\n"
+"Creates a skeleton function object.\n"
+"\n"
+"This skeleton contains just the provided code and the correct number of cells\n"
+"in func_closure.  All other func attributes (e.g. func_globals) are empty.");
+
+#define _PICKLE__MAKE_SKEL_FUNC_METHODDEF    \
+    {"_make_skel_func", (PyCFunction)(void(*)(void))_pickle__make_skel_func, METH_FASTCALL, _pickle__make_skel_func__doc__},
+
+static PyObject *
+_pickle__make_skel_func_impl(PyObject *module, PyObject *code,
+                             PyObject *base_globals);
+
+static PyObject *
+_pickle__make_skel_func(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *code;
+    PyObject *base_globals;
+
+    if (!_PyArg_UnpackStack(args, nargs, "_make_skel_func",
+        2, 2,
+        &code, &base_globals)) {
+        goto exit;
+    }
+    return_value = _pickle__make_skel_func_impl(module, code, base_globals);
+
+exit:
+    return return_value;
+}
+
 PyDoc_STRVAR(_pickle_Pickler_clear_memo__doc__,
 "clear_memo($self, /)\n"
 "--\n"

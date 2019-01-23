@@ -4070,6 +4070,55 @@ static int fill_globals(PyObject *co, PyObject **val){
     return 1;
 }
 
+/*[clinic input]
+_pickle._make_skel_func
+
+  code: object
+  base_globals: object
+  /
+
+Creates a skeleton function object.
+
+This skeleton contains just the provided code and the correct number of cells
+in func_closure.  All other func attributes (e.g. func_globals) are empty.
+[clinic start generated code]*/
+
+static PyObject *
+_pickle__make_skel_func_impl(PyObject *module, PyObject *code,
+                             PyObject *base_globals)
+/*[clinic end generated code: output=138a7627805277a8 input=68d85b7e6c6569b2]*/
+
+{
+    PyFunctionObject *newfunc = NULL;
+    PyObject *f_base_module, *func_global_namespace = NULL;
+
+    func_global_namespace = PyDict_New();
+
+    if PyUnicode_Check(base_globals){
+        f_base_module = PyImport_ImportModule(
+                PyUnicode_AsUTF8(base_globals));
+
+        if (f_base_module == NULL){
+            func_global_namespace = PyDict_New();
+            PyErr_Format(PyExc_RuntimeError,
+                         "module %s was not found", base_globals);
+            return NULL;
+        }
+        else {
+            func_global_namespace = PyModule_GetDict(f_base_module);
+        }
+        /* TODO implement dynamic module cache?*/
+    }
+    PyDict_SetItem(func_global_namespace, PyUnicode_FromString("__builtins__"),
+                   PyEval_GetBuiltins());
+    Py_INCREF(PyEval_GetBuiltins());
+
+
+    newfunc = (PyFunctionObject *)PyFunction_New((PyObject *)code,
+                                                 func_global_namespace);
+    return (PyObject *)newfunc;
+}
+
 static PyObject *
 extract_func_data(PicklerObject *self, PyObject *obj)
 {
@@ -7618,6 +7667,7 @@ static struct PyMethodDef pickle_methods[] = {
     _PICKLE_DUMPS_METHODDEF
     _PICKLE_LOAD_METHODDEF
     _PICKLE_LOADS_METHODDEF
+    _PICKLE__MAKE_SKEL_FUNC_METHODDEF
     {NULL, NULL} /* sentinel */
 };
 
