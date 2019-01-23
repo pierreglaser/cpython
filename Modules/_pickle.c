@@ -3010,6 +3010,33 @@ batch_dict_exact(PicklerObject *self, PyObject *obj)
 }
 
 static int
+save_code(PicklerObject *self, PyObject *obj)
+{
+    PyObject *save_reduce_tuple = NULL;
+    PyObject *state = NULL;
+
+    state = Py_BuildValue("(OOOOOOOOOOOOOOO)",
+                          PyObject_GetAttrString(obj, "co_argcount"),
+                          PyObject_GetAttrString(obj, "co_kwonlyargcount"),
+                          PyObject_GetAttrString(obj, "co_nlocals"),
+                          PyObject_GetAttrString(obj, "co_stacksize"),
+                          PyObject_GetAttrString(obj, "co_flags"),
+                          PyObject_GetAttrString(obj, "co_code"),
+                          PyObject_GetAttrString(obj, "co_consts"),
+                          PyObject_GetAttrString(obj, "co_names"),
+                          PyObject_GetAttrString(obj, "co_varnames"),
+                          PyObject_GetAttrString(obj, "co_filename"),
+                          PyObject_GetAttrString(obj, "co_name"),
+                          PyObject_GetAttrString(obj, "co_firstlineno"),
+                          PyObject_GetAttrString(obj, "co_lnotab"),
+                          PyObject_GetAttrString(obj, "co_freevars"),
+                          PyObject_GetAttrString(obj, "co_cellvars"));
+
+    save_reduce_tuple = Py_BuildValue("(OO)", (PyObject*)&PyCode_Type, state);
+    save_reduce(self, save_reduce_tuple,  obj);
+    return 0;
+}
+static int
 save_dict(PicklerObject *self, PyObject *obj)
 {
     PyObject *items, *iter;
@@ -4023,6 +4050,10 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
     else if (type == &PyType_Type) {
         status = save_type(self, obj);
         goto done;
+    }
+    else if (type == &PyCode_Type) {
+       status = save_code(self, obj);
+       goto done;
     }
     else if (type == &PyFunction_Type) {
         status = save_global(self, obj, NULL);
