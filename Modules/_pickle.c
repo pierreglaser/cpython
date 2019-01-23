@@ -7493,6 +7493,50 @@ _pickle_dump_impl(PyObject *module, PyObject *obj, PyObject *file,
     Py_XDECREF(pickler);
     return NULL;
 }
+/*[clinic input]
+_pickle._fill_function
+    func: 'O'
+    state: 'O'
+    /
+fills a function with its state.
+[clinic start generated code]*/
+
+static PyObject *
+_pickle__fill_function_impl(PyObject *module, PyObject *func,
+                            PyObject *state)
+/*[clinic end generated code: output=301f51eca294d882 input=7313f7950f43b7f5]*/
+{
+    if (!PyDict_Check(state)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    /* dynamic global variables shipped within func's pickle string will
+     * override their conterpart (if they exist) in f's new global namespace*/
+    PyDict_Update(PyFunction_GetGlobals(func),
+                  PyDict_GetItemString(state, "globals"));
+
+    PyFunction_SetDefaults(func, PyDict_GetItemString(state, "defaults"));
+
+    PyObject_SetAttrString(func, "__name__",
+                           PyDict_GetItemString(state, "name"));
+
+    PyObject_SetAttrString(func, "__dict__",
+                           PyDict_GetItemString(state, "dict"));
+
+    PyFunction_SetClosure(func, PyDict_GetItemString(state, "closure_values"));
+
+    PyObject_SetAttrString(func, "__module__",
+                           PyDict_GetItemString(state, "module"));
+
+    PyObject_SetAttrString(func, "__annotations__",
+                           PyDict_GetItemString(state, "annotations"));
+
+    PyObject_SetAttrString(func, "__qualname__",
+                           PyDict_GetItemString(state, "qualname"));
+
+    Py_INCREF(func);
+    return func;
+}
 
 /*[clinic input]
 
@@ -7667,6 +7711,7 @@ static struct PyMethodDef pickle_methods[] = {
     _PICKLE_DUMPS_METHODDEF
     _PICKLE_LOAD_METHODDEF
     _PICKLE_LOADS_METHODDEF
+    _PICKLE__FILL_FUNCTION_METHODDEF
     _PICKLE__MAKE_SKEL_FUNC_METHODDEF
     {NULL, NULL} /* sentinel */
 };
