@@ -3066,6 +3066,99 @@ save_module(PicklerObject *self, PyObject *obj)
     return 0;
 }
 
+/* Save submodules used by a function but not listed in its globals.
+ * When a function uses some package's submodule, the global variables
+ * extracted in extract_func_globals contain the package, but not the
+ * submodule. Thus, at depickling time, only the top-level package will be
+ * loaded. If the submodule is not imported automatically in the __init__.py of
+ * its parent package, running the loaded function may raise an AttributeError.
+ * For this reason, this function looks for currently loaded submodules
+ * (modules present in sys.modules) that are also used by the function, and
+ * saves them.*/
+static int
+save_subimports(PicklerObject *self, PyObject *code,
+                PyObject *top_level_dependencies)
+{
+    PyObject *sys_modules_names, *modules, *dependencies_iter = NULL;
+    PyObject *sys_modules_iter, *co_names, *package_name = NULL;
+    PyObject *tokens = NULL;
+
+    const char pop_op = POP;
+
+    _Py_IDENTIFIER(modules);
+    _Py_static_string(PyId_dot, ".");
+    modules = _PySys_GetObjectId(&PyId_modules);
+
+    /* A concurrent thread could mutate sys.modules. make sure we iterate over
+     * a copy to avoid exceptions */
+    sys_modules_names = PySequence_List(modules);
+
+    dependencies_iter = PyObject_GetIter(top_level_dependencies);
+    sys_modules_iter = PyObject_GetIter(sys_modules_names);
+
+    co_names = PySet_New(PyObject_GetAttrString(code, "co_names"));
+
+    for (;;) {
+        PyObject *item;
+        item = PyIter_Next(dependencies_iter);
+
+        if (item == NULL) {
+            if (PyErr_Occurred()) {
+                Py_DECREF(dependencies_iter);
+                return -1;
+            }
+            break;
+        }
+
+        /* check if any known dependency is an imported package */
+        if (PyModule_Check(item) &&
+            PyObject_HasAttrString(item, "__package__")){
+            if (!(PyObject_GetAttrString(item, "__package__") == Py_None)){
+                package_name = PyObject_GetAttrString(item, "__name__");
+                for (;;) {
+                    PyObject *module;
+                    module = PyIter_Next(sys_modules_iter);
+                    if (module == NULL) {
+                        if (PyErr_Occurred()) {
+                            Py_DECREF(sys_modules_iter);
+                            return -1;
+                        }
+                        break;
+                    }
+                    /* represents the splitted dotted path of module */
+                    tokens = PyUnicode_Split(module,
+                                             _PyUnicode_FromId(&PyId_dot),
+                                             -1);
+
+                    /* check if this module is a submodule with item as a
+                     * parent package */
+                    if (!PyUnicode_Compare(PyList_GetItem(tokens, 0),
+                                           package_name) &&
+                        PyList_Size(tokens) > 1){
+                        tokens = PyList_GetSlice(tokens,
+                                                 1, PyList_GET_SIZE(tokens));
+
+                        tokens = PySet_New(tokens);
+
+                        PyObject *diff = NULL;
+                        diff = tokens->ob_type->tp_as_number->nb_subtract(
+                            tokens, co_names);
+
+                        if (PySet_Size(diff) == 0){
+
+                            save_module(self, PyDict_GetItem(modules,
+                                                             module));
+                            _Pickler_Write(self, &pop_op, 1);
+
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 static int
 save_dict(PicklerObject *self, PyObject *obj)
 {
