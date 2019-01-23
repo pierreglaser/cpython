@@ -3036,6 +3036,20 @@ save_code(PicklerObject *self, PyObject *obj)
     save_reduce(self, save_reduce_tuple,  obj);
     return 0;
 }
+
+static int
+save_cell(PicklerObject *self, PyObject *obj)
+{
+    PyObject *save_reduce_tuple, *cell_contents;
+
+    /* TODO: check if cell_contents is NULL */
+    cell_contents = PyObject_GetAttrString(obj, "cell_contents");
+    save_reduce_tuple = Py_BuildValue("(O(O))", (PyObject*)&PyCell_Type,
+                                      cell_contents);
+    save_reduce(self, save_reduce_tuple,  obj);
+    return 0;
+}
+
 static int
 save_dict(PicklerObject *self, PyObject *obj)
 {
@@ -4053,6 +4067,10 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
     }
     else if (type == &PyCode_Type) {
        status = save_code(self, obj);
+       goto done;
+    }
+    else if (type == &PyCell_Type) {
+       status = save_cell(self, obj);
        goto done;
     }
     else if (type == &PyFunction_Type) {
