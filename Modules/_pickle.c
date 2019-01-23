@@ -3998,6 +3998,76 @@ save_reduce(PicklerObject *self, PyObject *args, PyObject *obj)
     return 0;
 }
 
+static int fill_globals(PyObject *co, PyObject **val){
+    PyObject *co_code, *co_names, *co_consts;
+    PyObject *op, *seq, *global_var_names;
+
+    Py_ssize_t oparg;
+    int i, len, first_arg_byte;
+    int extended_arg = 0;
+
+    global_var_names = PyList_New(0);
+
+    co_code = ((PyCodeObject *)co)->co_code;
+    co_names = ((PyCodeObject *)co)->co_names;
+    co_consts = ((PyCodeObject *)co)->co_consts;
+
+    Py_INCREF(co_code);
+    Py_INCREF(co_names);
+    Py_INCREF(co_consts);
+
+    seq = PySequence_Fast(co_code, "expected a sequence");
+    len = PySequence_Size(co_code);
+
+    i = 0;
+    while(i < len){
+        op = PySequence_Fast_GET_ITEM(seq, i);
+        if (HAS_ARG(PyLong_AS_LONG(op))){
+            first_arg_byte = PyLong_AS_LONG(PySequence_Fast_GET_ITEM(seq,
+                                                                     i+1));
+
+
+            extended_arg = 0;
+            oparg = first_arg_byte | extended_arg;
+
+            if (PyLong_AS_LONG(op) == EXTENDED_ARG){
+                extended_arg = oparg << 8;
+            }
+            if (PyLong_AS_LONG(op) == STORE_GLOBAL ||
+                PyLong_AS_LONG(op) == DELETE_GLOBAL ||
+                PyLong_AS_LONG(op) == LOAD_GLOBAL){
+
+
+                PyObject *name = PyTuple_GetItem(co_names, oparg);
+                PyList_Append(global_var_names, name); } } i+=2; }
+
+    /* If the function (f) with code co returns another function (g) that was
+       defined locally, then g's __code__ attribute will appear in
+       f.__code__.co_consts. The globals used by g also have to be extracted.
+       This is the purpose of the loop below */
+
+    if (co_consts != Py_None){
+        PyObject *const_seq = PySequence_Fast(
+                co_consts, "expected a sequence");
+        Py_ssize_t consts_len = PySequence_Size(co_consts);
+        int j = 0;
+        PyObject *next_const;
+        while (j < consts_len){
+            next_const = PySequence_Fast_GET_ITEM(const_seq, j);
+            if (Py_TYPE(next_const) == &PyCode_Type){
+                PyObject *globals_from_nested_funcs = PyList_New(0);
+                fill_globals(next_const, &globals_from_nested_funcs);
+                _PyList_Extend((PyListObject *)global_var_names,
+                               globals_from_nested_funcs);
+            }
+            j++;
+
+        }
+    }
+
+    *val = global_var_names;
+    return 1;
+}
 static int
 save(PicklerObject *self, PyObject *obj, int pers_save)
 {
