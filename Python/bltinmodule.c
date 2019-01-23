@@ -2799,6 +2799,9 @@ _PyBuiltin_Init(void)
     SETBUILTIN("bytearray",             &PyByteArray_Type);
     SETBUILTIN("bytes",                 &PyBytes_Type);
     SETBUILTIN("classmethod",           &PyClassMethod_Type);
+    SETBUILTIN("cell",                  &PyCell_Type);
+    SETBUILTIN("code",                  &PyCode_Type);
+    SETBUILTIN("function",              &PyFunction_Type);
     SETBUILTIN("complex",               &PyComplex_Type);
     SETBUILTIN("dict",                  &PyDict_Type);
     SETBUILTIN("enumerate",             &PyEnum_Type);
