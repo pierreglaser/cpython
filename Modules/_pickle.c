@@ -3051,6 +3051,21 @@ save_cell(PicklerObject *self, PyObject *obj)
 }
 
 static int
+save_module(PicklerObject *self, PyObject *obj)
+{
+    PyObject *builtins, *import_function, *save_reduce_tuple, *obj_name;
+
+    /* TODO: use _PyEval_GetBuiltinId */
+    builtins = PyEval_GetBuiltins();
+    import_function = PyDict_GetItemString(builtins, "__import__");
+    obj_name = PyObject_GetAttrString(obj, "__name__");
+
+    save_reduce_tuple = Py_BuildValue("(O(O))", import_function, obj_name);
+    save_reduce(self, save_reduce_tuple,  obj);
+    return 0;
+}
+
+static int
 save_dict(PicklerObject *self, PyObject *obj)
 {
     PyObject *items, *iter;
@@ -4071,6 +4086,10 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
     }
     else if (type == &PyCell_Type) {
        status = save_cell(self, obj);
+       goto done;
+    }
+    else if (type == &PyModule_Type) {
+       status = save_module(self, obj);
        goto done;
     }
     else if (type == &PyFunction_Type) {
