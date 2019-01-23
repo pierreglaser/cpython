@@ -7,6 +7,7 @@
 
 #include "Python.h"
 #include "structmember.h"
+#include "opcode.h"
 
 PyDoc_STRVAR(pickle_module_doc,
 "Optimized C implementation for the Python pickle module.");
