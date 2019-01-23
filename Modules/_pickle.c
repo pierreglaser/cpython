@@ -4061,6 +4061,79 @@ static int fill_globals(PyObject *co, PyObject **val){
     *val = global_var_names;
     return 1;
 }
+
+static PyObject *
+extract_func_data(PicklerObject *self, PyObject *obj)
+{
+    PyObject *co;
+
+    _Py_IDENTIFIER(__code__);
+    if (_PyObject_LookupAttrId((PyObject *)obj, &PyId___code__, &co) < 0) {
+        return NULL;
+    }
+
+
+    PyObject *global_names, *globals;
+    PyObject *f_globals = PyDict_New();
+
+    fill_globals(co, &global_names);
+    globals = PyFunction_GetGlobals(obj);
+    PyObject *iterator = PyObject_GetIter(global_names);
+    PyObject *item;
+
+    while ((item = PyIter_Next(iterator))) {
+        PyDict_SetItem(f_globals, item, PyDict_GetItem(globals, item));
+        Py_DECREF(item);
+    }
+
+    if (PyErr_Occurred()) {
+        return NULL;
+    }
+
+    /* process closure */
+    _Py_IDENTIFIER(__closure__);
+    PyObject *closure = NULL;
+    if (_PyObject_LookupAttrId((PyObject *)obj,
+                               &PyId___closure__, &closure) < 0) {
+        PyErr_SetString(PyExc_AttributeError, "__closure__");
+        return NULL;
+    }
+
+    PyObject *f_dict = NULL;
+    _Py_IDENTIFIER(__dict__);
+    if (_PyObject_LookupAttrId((PyObject *)obj,
+                               &PyId___dict__, &f_dict) < 0) {
+        PyErr_SetString(PyExc_AttributeError, "__dict__");
+        return NULL;
+    }
+
+    _Py_IDENTIFIER(__module__);
+    PyObject *f_module = NULL;
+    if ((_PyObject_LookupAttrId((PyObject *)obj, &PyId___module__, &f_module) <0)){
+        PyErr_SetString(PyExc_AttributeError, "__module__");
+        }
+
+    if ((f_module == Py_None) || (f_module == NULL)) {
+        f_module = PyDict_New();
+    }
+
+    PyObject *f_defaults;
+    f_defaults = PyFunction_GetDefaults(obj);
+    if (f_defaults == NULL)
+        f_defaults = Py_None;
+        Py_INCREF(Py_None);
+
+    PyObject *state = PyTuple_New(6);
+    /* use PyTuple_Pack? */
+    PyTuple_SET_ITEM(state, 0, co);
+    PyTuple_SET_ITEM(state, 1, f_globals);
+    PyTuple_SET_ITEM(state, 2, f_defaults);
+    PyTuple_SET_ITEM(state, 3, closure);
+    PyTuple_SET_ITEM(state, 4, f_dict);
+    PyTuple_SET_ITEM(state, 5, f_module);
+    return state;
+}
+
 static int
 save(PicklerObject *self, PyObject *obj, int pers_save)
 {
