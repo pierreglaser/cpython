@@ -678,6 +678,9 @@ typedef struct UnpicklerObject {
     int proto;                  /* Protocol of the pickle loaded. */
     int fix_imports;            /* Indicate whether Unpickler should fix
                                    the name of globals pickled by Python 2.x. */
+    int allow_dynamic_objects;  /* Switch allowing to load pickle strings
+                                   containing instructions to create new
+                                   functions and/or classes  */
 } UnpicklerObject;
 
 typedef struct {
@@ -7241,6 +7244,7 @@ _pickle.Unpickler.__init__
   fix_imports: bool = True
   encoding: str = 'ASCII'
   errors: str = 'strict'
+  allow_dynamic_objects: bool = False
 
 This takes a binary file for reading a pickle data stream.
 
@@ -7267,8 +7271,9 @@ string instances as bytes objects.
 static int
 _pickle_Unpickler___init___impl(UnpicklerObject *self, PyObject *file,
                                 int fix_imports, const char *encoding,
-                                const char *errors)
-/*[clinic end generated code: output=e2c8ce748edc57b0 input=f9b7da04f5f4f335]*/
+                                const char *errors,
+                                int allow_dynamic_objects)
+/*[clinic end generated code: output=af1f93e0b4864246 input=191060f51124c484]*/
 {
     _Py_IDENTIFIER(persistent_load);
 
@@ -7300,6 +7305,8 @@ _pickle_Unpickler___init___impl(UnpicklerObject *self, PyObject *file,
         return -1;
 
     self->proto = 0;
+
+    self->allow_dynamic_objects = allow_dynamic_objects;
 
     return 0;
 }
