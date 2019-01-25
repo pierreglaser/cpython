@@ -23,6 +23,11 @@ Misc variables:
 
 """
 
+import dis
+import importlib
+import opcode
+import types
+import weakref
 from types import FunctionType
 from copyreg import dispatch_table
 from copyreg import _extension_registry, _inverted_registry, _extension_cache
@@ -60,6 +65,64 @@ HIGHEST_PROTOCOL = 4
 # Only bump this if the oldest still supported version of Python already
 # includes it.
 DEFAULT_PROTOCOL = 4
+
+STORE_GLOBAL = opcode.opmap['STORE_GLOBAL']
+DELETE_GLOBAL = opcode.opmap['DELETE_GLOBAL']
+LOAD_GLOBAL = opcode.opmap['LOAD_GLOBAL']
+GLOBAL_OPS = (STORE_GLOBAL, DELETE_GLOBAL, LOAD_GLOBAL)
+
+try:
+    from _pickle import _make_skel_func as c__make_skel_func
+except ImportError:
+    c__make_skel_func = None
+
+
+def _fill_function(func, state):
+    """Fill a skeleton function object with the rest of the function's data
+
+    The skeleton itself is created by _make_skel_func()
+    """
+    # Only set global variables that do not exist.
+    for k, v in state['globals'].items():
+        if k not in func.__globals__:
+            func.__globals__[k] = v
+
+    if state['closure_values'] is not None:
+        for i, cell in enumerate(state['closure_values']):
+            func.__closure__[i].cell_contents = cell.cell_contents
+
+    func.__defaults__ = state['defaults']
+    func.__dict__ = state['dict']
+    func.__annotations__ = state['annotations']
+    func.__doc__ = state['doc']
+    func.__name__ = state['name']
+    func.__module__ = state['module']
+    func.__qualname__ = state['qualname']
+
+    return func
+
+
+def _make_skel_func(code, base_globals=None, cell_count=None):
+    """ Creates a skeleton function object that contains just the provided
+        code and the correct number of cells in func_closure.  All other
+        func attributes (e.g. func_globals) are empty.
+    """
+    base_globals = {'__builtins__': __builtins__}
+    closure = tuple(cell() for _ in range(cell_count))
+
+    return types.FunctionType(code, base_globals, None, None, closure)
+
+
+def _walk_global_ops(code):
+    """
+    Yield (opcode, argument number) tuples for all
+    global-referencing instructions in *code*.
+    """
+    for instr in dis.get_instructions(code):
+        op = instr.opcode
+        if op in GLOBAL_OPS:
+            yield op, instr.arg
+
 
 class PickleError(Exception):
     """A common base class for the other pickling exceptions."""
@@ -662,6 +725,181 @@ class _Pickler:
 
     dispatch = {}
 
+    def save_module(self, obj):
+        """
+        Save a module as an import
+        """
+        self.save_reduce(__import__, (obj.__name__,), obj=obj)
+
+    dispatch[types.ModuleType] = save_module
+
+    def _save_subimports(self, code, top_level_dependencies):
+        """
+        Save submodules used by a function but not listed in its globals.
+
+        In the example below:
+
+        ```
+        import xml.etree
+        import pickle
+
+
+        def func():
+            x = xml.etree
+
+
+        if __name__ == '__main__':
+            pickle.dumps(func)
+        ```
+
+        the globals extracted by pickle in the function's state include
+        the xml package, but not its submodule (here,
+        xml.etree) as it is referenced only as an attribute to xml.
+
+        To ensure that calling the depickled function in a fresh environment
+        does not raise an AttributeError, this function looks for any module
+        that is:
+        - currently loaded (i.e present in sys.modules)
+        - that the code object references.
+        - whose parent is present in the function globals Each module
+          satifsying the above conditions is saved by the Pickler.
+
+
+
+        Note:
+        -----
+        Due to the way the function looks for module references in the code
+        object, unnessary modules can be pickled.
+        """
+
+        # check if any known dependency is an imported package
+        for x in top_level_dependencies:
+            if (isinstance(x, types.ModuleType) and
+                    hasattr(x, '__package__') and x.__package__):
+                # check if the package has any currently loaded sub-imports
+                prefix = x.__name__ + '.'
+                # A concurrent thread could mutate sys.modules,
+                # make sure we iterate over a copy to avoid exceptions
+                for name in list(sys.modules):
+                    if name.startswith(prefix):
+                        # check whether the function can address the sub-module
+                        tokens = set(name[len(prefix):].split('.'))
+                        if not tokens - set(code.co_names):
+                            # ensure unpickler executes this import
+                            self.save(sys.modules[name])
+                            # then discards the reference to it
+                            self.write(POP)
+
+    def save_function_tuple(self, func):
+        """ Pickles an actual func object.
+
+        A func comprises: code, globals, defaults, closure, and dict.  We
+        extract and save these, injecting reducing functions at certain points
+        to recreate the func object.  Keep in mind that some of these pieces
+        can contain a ref to the func itself.  Thus, a naive save on these
+        pieces could trigger an infinite loop of save's.  To get around that,
+        we first create a skeleton func object using just the code (this is
+        safe, since this won't contain a ref to the func), and memoize it as
+        soon as it's created.  The other stuff can then be filled in later.
+        """
+        save = self.save
+        write = self.write
+
+        func_data = self.extract_func_data(func)
+        code, f_globals, defaults, closure, dct, base_globals = func_data
+
+        save(_fill_function)  # skeleton function updater
+        write(MARK)    # beginning of tuple that _fill_function expects
+
+        self._save_subimports(code, f_globals.values())
+
+        # create a skeleton function object and memoize it
+        save(_make_skel_func)
+        save((
+            code,
+            base_globals,
+            len(closure) if closure is not None else 0
+        ))
+        write(REDUCE)
+        self.memoize(func)
+
+        # save the rest of the func data needed by _fill_function
+        state = {
+            'globals': f_globals,
+            'defaults': defaults,
+            'dict': dct,
+            'closure_values': closure,
+            'module': func.__module__,
+            'name': func.__name__,
+            'doc': func.__doc__,
+            'annotations': func.__annotations__,
+            'qualname': func.__qualname__
+        }
+        save(state)
+        write(TUPLE)
+        write(REDUCE)  # applies _fill_function on the tuple
+
+    _extract_code_globals_cache = weakref.WeakKeyDictionary()
+
+    def extract_func_data(self, func):
+        """
+        Turn the function into a tuple of data necessary to recreate it:
+            code, globals, defaults, closure_values, dict
+        """
+        code = func.__code__
+
+        # extract all global ref's
+        func_global_refs = self.extract_code_globals(code)
+
+        # process all variables referenced by global environment
+        f_globals = {}
+        for var in func_global_refs:
+            if var in func.__globals__:
+                f_globals[var] = func.__globals__[var]
+
+        # defaults requires no processing
+        defaults = func.__defaults__
+
+        # process closure
+        closure = func.__closure__
+
+        # save the dict
+        dct = func.__dict__
+
+        # For functions defined in a well behaved module use
+        # vars(func.__module__) for base_globals. This is necessary to
+        # share the global variables across multiple pickled functions from
+        # this module.
+        if func.__module__ is not None:
+            base_globals = func.__module__
+        else:
+            base_globals = {}
+
+        return (code, f_globals, defaults, closure, dct, base_globals)
+
+    def extract_code_globals(cls, co):
+        """
+        Find all globals names read or written to by codeblock co
+        """
+        out_names = cls._extract_code_globals_cache.get(co)
+        if out_names is None:
+            names = co.co_names
+            out_names = {names[oparg] for _, oparg in _walk_global_ops(co)}
+
+            # functions returning another function defined in their own local
+            # scope will constain the codeobject of the local function in
+            # __code__.co_consts. For the main function to be depickled
+            # properly, the globals of this codeobject also need to be
+            # extracted
+            if co.co_consts:
+                for const in co.co_consts:
+                    if isinstance(type(const), types.CodeType):
+                        out_names |= cls.extract_code_globals(const)
+
+            cls._extract_code_globals_cache[co] = out_names
+
+        return out_names
+
     def save_none(self, obj):
         self.write(NONE)
     dispatch[type(None)] = save_none
@@ -1008,15 +1246,93 @@ class _Pickler:
             return self.save_reduce(type, (...,), obj=obj)
         return self.save_global(obj)
 
-    dispatch[FunctionType] = save_global
     dispatch[type] = save_type
+
+    def save_function(self, obj, name=None):
+        """ Registered with the dispatch to handle all function types.
+
+        Determines what kind of function obj is (e.g. lambda, defined at
+        interactive prompt, etc) and handles the pickling appropriately.
+        """
+        write = self.write
+
+        if name is None:
+            name = getattr(obj, '__qualname__', None)
+        if name is None:
+            name = obj.__name__
+
+        # look for obj in the __main__ module first. Indeed, if func.__module__
+        # is None, whichmodule will iterate through all modules in sys.modules.
+        # If in addition, multiprocessing is imported, __mp_main__ will exist
+        # as a reference to __main__ in sys.modules. If whichmodule returns
+        # __mp_main__, obj will be pickled using save_global, whereas it should
+        # be pickled by using save_function_tuple
+
+        try:
+            lookedup_by_name, _ = _getattribute(sys.modules['__main__'], name)
+            modname = '__main__'
+            themodule = sys.modules['__main__']
+        except (ImportError, KeyError, AttributeError):
+            modname = whichmodule(obj, name)
+            themodule = sys.modules[modname]
+            try:
+                lookedup_by_name, _ = _getattribute(themodule, name)
+            except (ImportError, KeyError, AttributeError):
+                lookedup_by_name = None
+
+        # A builtin_function_or_method which comes in as an attribute of some
+        # object (e.g., itertools.chain.from_iterable) will end
+        # up with modname "__main__" and so end up here. But these functions
+        # have no __code__ attribute in CPython, so the handling for
+        # user-defined functions below will fail.
+        # So we pickle them here using save_reduce; have to do it differently
+        # for different python versions.
+        if not hasattr(obj, '__code__'):
+            rv = obj.__reduce_ex__(self.proto)
+            return self.save_reduce(obj=obj, *rv)
+
+        if lookedup_by_name is not obj or modname == '__main__':
+            # functions defined in the __main__ modules are not picklable
+            # using the simple attribute path to the function.
+            # (module.submodule.[...].function). Instead, all the elements
+            # necessary to recreate the function from scratch (code, global
+            # variables etc.) are serialized.
+            self.save_function_tuple(obj)
+            return
+        else:
+            return self.save_global(obj, name)
+
+    dispatch[types.FunctionType] = save_function
+
+    def save_codeobject(self, obj):
+        """
+        Save a code object
+        """
+        args = (
+            obj.co_argcount, obj.co_kwonlyargcount, obj.co_nlocals,
+            obj.co_stacksize, obj.co_flags, obj.co_code, obj.co_consts,
+            obj.co_names, obj.co_varnames, obj.co_filename, obj.co_name,
+            obj.co_firstlineno, obj.co_lnotab, obj.co_freevars, obj.co_cellvars
+        )
+        self.save_reduce(types.CodeType, args, obj=obj)
+
+    dispatch[types.CodeType] = save_codeobject
+
+    def save_cell(self, obj):
+        """
+        Save a cell object
+        """
+        args = (obj.cell_contents, )
+        self.save_reduce(cell, args, obj=obj)
+
+    dispatch[cell] = save_cell
 
 
 # Unpickling machinery
 
 class _Unpickler:
 
-    def __init__(self, file, *, fix_imports=True,
+    def __init__(self, file, *, allow_dynamic_objects=False, fix_imports=True,
                  encoding="ASCII", errors="strict"):
         """This takes a binary file for reading a pickle data stream.
 
@@ -1052,6 +1368,7 @@ class _Unpickler:
         self.errors = errors
         self.proto = 0
         self.fix_imports = fix_imports
+        self.allow_dynamic_objects = allow_dynamic_objects
 
     def load(self):
         """Read a pickled object representation from the open file.
@@ -1426,6 +1743,12 @@ class _Unpickler:
         stack = self.stack
         args = stack.pop()
         func = stack[-1]
+        # prevent make_skel_func from being executed if the _Unpickler's
+        # allow_dynamic_objects switch is off
+        if (not self.allow_dynamic_objects and
+                (func is _make_skel_func or func is c__make_skel_func)):
+            raise PicklingError(
+                    'Attempting to load dynamic objects')
         stack[-1] = func(*args)
     dispatch[REDUCE[0]] = load_reduce
 
@@ -1584,16 +1907,20 @@ def _dumps(obj, protocol=None, *, fix_imports=True):
     assert isinstance(res, bytes_types)
     return res
 
-def _load(file, *, fix_imports=True, encoding="ASCII", errors="strict"):
-    return _Unpickler(file, fix_imports=fix_imports,
-                     encoding=encoding, errors=errors).load()
+def _load(file, *, allow_dynamic_objects=False, fix_imports=True,
+          encoding="ASCII", errors="strict"):
+    return _Unpickler(file, allow_dynamic_objects=allow_dynamic_objects,
+                      fix_imports=fix_imports, encoding=encoding,
+                      errors=errors).load()
 
-def _loads(s, *, fix_imports=True, encoding="ASCII", errors="strict"):
+def _loads(s, *, allow_dynamic_objects=False, fix_imports=True,
+           encoding="ASCII", errors="strict"):
     if isinstance(s, str):
         raise TypeError("Can't load pickle from unicode string")
     file = io.BytesIO(s)
-    return _Unpickler(file, fix_imports=fix_imports,
-                      encoding=encoding, errors=errors).load()
+    return _Unpickler(file, allow_dynamic_objects=allow_dynamic_objects,
+                      fix_imports=fix_imports, encoding=encoding,
+                      errors=errors).load()
 
 # Use the faster _pickle if possible
 try:
