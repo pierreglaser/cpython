@@ -287,7 +287,8 @@ exit:
 }
 
 PyDoc_STRVAR(_pickle_Unpickler___init____doc__,
-"Unpickler(file, *, fix_imports=True, encoding=\'ASCII\', errors=\'strict\')\n"
+"Unpickler(file, *, fix_imports=True, encoding=\'ASCII\', errors=\'strict\',\n"
+"          allow_dynamic_objects=False)\n"
 "--\n"
 "\n"
 "This takes a binary file for reading a pickle data stream.\n"
@@ -314,24 +315,26 @@ PyDoc_STRVAR(_pickle_Unpickler___init____doc__,
 static int
 _pickle_Unpickler___init___impl(UnpicklerObject *self, PyObject *file,
                                 int fix_imports, const char *encoding,
-                                const char *errors);
+                                const char *errors,
+                                int allow_dynamic_objects);
 
 static int
 _pickle_Unpickler___init__(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     int return_value = -1;
-    static const char * const _keywords[] = {"file", "fix_imports", "encoding", "errors", NULL};
-    static _PyArg_Parser _parser = {"O|$pss:Unpickler", _keywords, 0};
+    static const char * const _keywords[] = {"file", "fix_imports", "encoding", "errors", "allow_dynamic_objects", NULL};
+    static _PyArg_Parser _parser = {"O|$pssp:Unpickler", _keywords, 0};
     PyObject *file;
     int fix_imports = 1;
     const char *encoding = "ASCII";
     const char *errors = "strict";
+    int allow_dynamic_objects = 0;
 
     if (!_PyArg_ParseTupleAndKeywordsFast(args, kwargs, &_parser,
-        &file, &fix_imports, &encoding, &errors)) {
+        &file, &fix_imports, &encoding, &errors, &allow_dynamic_objects)) {
         goto exit;
     }
-    return_value = _pickle_Unpickler___init___impl((UnpicklerObject *)self, file, fix_imports, encoding, errors);
+    return_value = _pickle_Unpickler___init___impl((UnpicklerObject *)self, file, fix_imports, encoding, errors, allow_dynamic_objects);
 
 exit:
     return return_value;
