@@ -528,7 +528,7 @@ exit:
 
 PyDoc_STRVAR(_pickle_load__doc__,
 "load($module, /, file, *, fix_imports=True, encoding=\'ASCII\',\n"
-"     errors=\'strict\')\n"
+"     errors=\'strict\', allow_dynamic_objects=False)\n"
 "--\n"
 "\n"
 "Read and return an object from the pickle data stored in a file.\n"
@@ -560,24 +560,26 @@ PyDoc_STRVAR(_pickle_load__doc__,
 
 static PyObject *
 _pickle_load_impl(PyObject *module, PyObject *file, int fix_imports,
-                  const char *encoding, const char *errors);
+                  const char *encoding, const char *errors,
+                  int allow_dynamic_objects);
 
 static PyObject *
 _pickle_load(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
 {
     PyObject *return_value = NULL;
-    static const char * const _keywords[] = {"file", "fix_imports", "encoding", "errors", NULL};
-    static _PyArg_Parser _parser = {"O|$pss:load", _keywords, 0};
+    static const char * const _keywords[] = {"file", "fix_imports", "encoding", "errors", "allow_dynamic_objects", NULL};
+    static _PyArg_Parser _parser = {"O|$pssp:load", _keywords, 0};
     PyObject *file;
     int fix_imports = 1;
     const char *encoding = "ASCII";
     const char *errors = "strict";
+    int allow_dynamic_objects = 0;
 
     if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser,
-        &file, &fix_imports, &encoding, &errors)) {
+        &file, &fix_imports, &encoding, &errors, &allow_dynamic_objects)) {
         goto exit;
     }
-    return_value = _pickle_load_impl(module, file, fix_imports, encoding, errors);
+    return_value = _pickle_load_impl(module, file, fix_imports, encoding, errors, allow_dynamic_objects);
 
 exit:
     return return_value;
@@ -585,7 +587,7 @@ exit:
 
 PyDoc_STRVAR(_pickle_loads__doc__,
 "loads($module, /, data, *, fix_imports=True, encoding=\'ASCII\',\n"
-"      errors=\'strict\')\n"
+"      errors=\'strict\', allow_dynamic_objects=False)\n"
 "--\n"
 "\n"
 "Read and return an object from the given pickle data.\n"
@@ -608,26 +610,28 @@ PyDoc_STRVAR(_pickle_loads__doc__,
 
 static PyObject *
 _pickle_loads_impl(PyObject *module, PyObject *data, int fix_imports,
-                   const char *encoding, const char *errors);
+                   const char *encoding, const char *errors,
+                   int allow_dynamic_objects);
 
 static PyObject *
 _pickle_loads(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
 {
     PyObject *return_value = NULL;
-    static const char * const _keywords[] = {"data", "fix_imports", "encoding", "errors", NULL};
-    static _PyArg_Parser _parser = {"O|$pss:loads", _keywords, 0};
+    static const char * const _keywords[] = {"data", "fix_imports", "encoding", "errors", "allow_dynamic_objects", NULL};
+    static _PyArg_Parser _parser = {"O|$pssp:loads", _keywords, 0};
     PyObject *data;
     int fix_imports = 1;
     const char *encoding = "ASCII";
     const char *errors = "strict";
+    int allow_dynamic_objects = 0;
 
     if (!_PyArg_ParseStackAndKeywords(args, nargs, kwnames, &_parser,
-        &data, &fix_imports, &encoding, &errors)) {
+        &data, &fix_imports, &encoding, &errors, &allow_dynamic_objects)) {
         goto exit;
     }
-    return_value = _pickle_loads_impl(module, data, fix_imports, encoding, errors);
+    return_value = _pickle_loads_impl(module, data, fix_imports, encoding, errors, allow_dynamic_objects);
 
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=4b32d63ff58b64d8 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=1fa32e9af35ad449 input=a9049054013a1b77]*/
