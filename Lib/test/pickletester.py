@@ -3,21 +3,27 @@ import copyreg
 import dbm
 import io
 import functools
+import os
 import pickle
 import pickletools
 import struct
 import sys
 import unittest
+import textwrap
 import weakref
 from http.cookies import SimpleCookie
 
 from test import support
+from test.support.script_helper import assert_python_ok
 from test.support import (
     TestFailed, TESTFN, run_with_locale, no_tracing,
-    _2G, _4G, bigmemtest,
+    _2G, _4G, bigmemtest, unlink
     )
 
 from pickle import bytes_types
+
+
+_TEST_GLOBAL_VARIABLE
 
 requires_32b = unittest.skipUnless(sys.maxsize < 2**32,
                                    "test is only meaningful on 32-bit builds")
@@ -2264,6 +2270,278 @@ class AbstractPickleTests(unittest.TestCase):
                 self.assertIs(unpickled, Recursive)
         del Recursive.mod # break reference loop
 
+    def test_module(self):
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            unpickled = self.loads(self.dumps(pickle, proto))
+            self.assertIs(pickle, unpickled)
+
+    def test_cell(self):
+        cellobject = cell(1)
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            unpickled_cellobject = self.loads(self.dumps(cellobject, proto))
+            self.assertEqual(cellobject.cell_contents,
+                             unpickled_cellobject.cell_contents)
+
+    def test_allow_dyanamic_objects_switch(self):
+        pickled_func_path = 'pickled_func.pk'
+        main_script = """
+        import pickle
+
+
+        def f0(x):
+            return x**2
+
+        with open("{pickled_func_path}", "wb") as f:
+            pickle.dump(f0, f)
+
+        # This function should be properly depickled, since
+        # allow_dynamic_objects switch is on
+        depickled_f0 = pickle.loads(
+            pickle.dumps(f0), allow_dynamic_objects=True)
+        assert depickled_f0(5) == f0(5)
+
+        with open("{pickled_func_path}", "rb") as f:
+            depickled_f0 = pickle.load(f, allow_dynamic_objects=True)
+        assert depickled_f0(5) == f0(5)
+
+
+        # Trying to load f0 should raise a PicklingError this time, because
+        # pickle.loads is called with the allow_dynamic_objects switch off
+        try:
+            pickle.loads(pickle.dumps(f0), allow_dynamic_objects=False)
+        except pickle.UnpicklingError:
+            pass
+        else:
+            raise AssertionError('loading this function should raise a'
+                                 ' PicklingError')
+
+        try:
+            with open("{pickled_func_path}", "rb") as f:
+                func = pickle.load(f,allow_dynamic_objects=False)
+        except pickle.UnpicklingError:
+            pass
+        else:
+            raise AssertionError('loading this function should raise a'
+                                 ' PicklingError')
+        """.format(pickled_func_path=pickled_func_path)
+
+        try:
+            env_vars = {'COVERAGE_PROCESS_START': os.environ.get(
+                        "COVERAGE_PROCESS_START", "")}
+            assert_python_ok('-S', '-c', textwrap.dedent(main_script),
+                             **env_vars)
+        finally:
+            unlink(pickled_func_path)
+
+    def test_closure_interacting_with_a_global_variable(self):
+        global _TEST_GLOBAL_VARIABLE
+        assert _TEST_GLOBAL_VARIABLE == "default_value"
+        orig_value = _TEST_GLOBAL_VARIABLE
+        try:
+            def f0():
+                global _TEST_GLOBAL_VARIABLE
+                _TEST_GLOBAL_VARIABLE = "changed_by_f0"
+
+            def f1():
+                return _TEST_GLOBAL_VARIABLE
+
+            cloned_f0 = self.loads(self.dumps(
+                f0, protocol=self.protocol))
+            cloned_f1 = self.loads(self.dumps(
+                f1, protocol=self.protocol))
+            pickled_f1 = self.dumps(f1, protocol=self.protocol)
+
+            # Change the value of the global variable
+            cloned_f0()
+            assert _TEST_GLOBAL_VARIABLE == "changed_by_f0"
+
+            # Ensure that the global variable is the same for another function
+            result_cloned_f1 = cloned_f1()
+            assert result_cloned_f1 == "changed_by_f0", result_cloned_f1
+            assert f1() == result_cloned_f1
+
+            # Ensure that unpickling the global variable does not change its
+            # value
+            result_pickled_f1 = self.loads(pickled_f1)()
+            assert result_pickled_f1 == "changed_by_f0", result_pickled_f1
+        finally:
+            _TEST_GLOBAL_VARIABLE = orig_value
+
+    def test_recursive_closure(self):
+        pickled_func_path = 'pickled_func.pk'
+
+        main_subprocess_script = """'''
+        import pickle
+        import textwrap
+
+
+        with open("{pickled_func_path}", "rb") as f:
+            funcs = pickle.load(f, allow_dynamic_objects=True)
+
+        f1, f2 = funcs
+
+        g = f1()
+
+
+        assert g == g()
+
+        assert f2(2)(5) == 240, f2(5)
+
+        '''""".format(pickled_func_path=pickled_func_path)
+
+        main_script = """
+        import pickle
+        import textwrap
+
+        from test.support.script_helper import assert_python_ok
+
+        def f1():
+            def g():
+                return g
+            return g
+
+        def f2(base):
+            def g(n):
+                return base if n <= 1 else n * g(n - 1)
+            return g
+
+
+        with open("{pickled_func_path}", "wb") as f:
+            pickle.dump([f1, f2], f)
+
+        assert_python_ok("-c", {main_subprocess_script})
+
+        """.format(pickled_func_path=pickled_func_path,
+                   main_subprocess_script=main_subprocess_script)
+
+        try:
+            env_vars = {'COVERAGE_PROCESS_START': os.environ.get(
+                        "COVERAGE_PROCESS_START", "")}
+            assert_python_ok('-S', '-c', textwrap.dedent(main_script),
+                             **env_vars)
+        finally:
+            unlink(pickled_func_path)
+
+    def test_method_in_main(self):
+        pickled_func_path = 'pickled_func.pk'
+
+        # this script loads pickle objects representing functions defined in a
+        # __main__ module. It makes sure all elements of the original function
+        # are properly retrieved.
+        main_subprocess_script = """'''
+        import pickle
+        import textwrap
+
+
+        with open("{pickled_func_path}", "rb") as f:
+            funcs = pickle.load(f, allow_dynamic_objects=True)
+
+        f_no_module, f_using_a_global, f_needing_subimport, f_with_dict, \
+                f_with_default_kw, nested_function = funcs
+
+        assert f_no_module(2) == 4
+
+        assert f_using_a_global() == 43
+
+        depickled_module = f_needing_subimport()
+        import xml.etree.ElementTree
+        assert depickled_module == xml.etree.ElementTree
+
+        assert f_with_dict() == 1
+        assert f_with_dict.additional_module is textwrap
+        assert f_with_dict.constant == 42
+
+        assert f_with_default_kw() == 2
+        assert f_with_default_kw(1) == 1
+        assert f_with_default_kw.__defaults__ == (2, )
+
+        assert nested_function() == 1
+
+
+        '''""".format(pickled_func_path=pickled_func_path)
+
+        # this script defines a variety of function functions, and pickles
+        # them. It is ran as __main__. Thus, the functions defined in this
+        # script will not be pickled as attribute to a module. They will
+        # instead be handled by pickling each of their attribute, as well as a
+        # specific reconstructor, that will be called at loading time.
+        main_script = """
+        import pickle
+        import textwrap
+        import xml.etree
+
+        from test.support.script_helper import assert_python_ok
+
+
+        CONSTANT = 42
+
+        # if a f's __module__ attribute is None, pickling takes a different
+        # path. Especially, the current global variable values won't get
+        # overriden by their value in the module in which the function will be
+        # loaded
+        # TODO: prove this.
+        def f_no_module(x):
+            return x**2
+        f_no_module.__module__ = None
+
+        # function using a global variable
+        def f_using_a_global():
+            global CONSTANT
+            a = 1
+            return CONSTANT + 1
+
+
+        # Test making sure that a function using a submodule that are
+        # referenced as an attribute to its package but not imported in the
+        # __init__ of its package does not raise an AttributeError when
+        # depickled in a fresh new environment
+
+        # examples of such submodules in the standard library include:
+        # - http.cookies, unittest.mock, curses.textpad, xml.etree
+        def f_needing_subimport():
+            y = xml.etree.ElementTree
+            return y
+
+        # function with additional attributes, creating entries in its __dict__
+        def f_with_dict():
+            return 1
+
+        f_with_dict.additional_module = textwrap
+        f_with_dict.constant = CONSTANT
+
+        # function with default arguments
+        def f_with_default_kw(x=2):
+            return x
+
+        # nested function with a non empty closure
+        def nested_function_factory():
+            variable_in_closure = 1
+            def nested_function():
+                nonlocal variable_in_closure
+                return variable_in_closure
+            return nested_function
+
+        nested_function = nested_function_factory()
+
+        with open("{pickled_func_path}", "wb") as f:
+            pickle.dump([f_no_module, f_using_a_global,f_needing_subimport,
+                         f_with_dict, f_with_default_kw, nested_function], f)
+
+        assert_python_ok("-c", {main_subprocess_script})
+
+        """.format(pickled_func_path=pickled_func_path,
+                   main_subprocess_script=main_subprocess_script)
+
+        try:
+            env_vars = {'COVERAGE_PROCESS_START': os.environ.get(
+                        "COVERAGE_PROCESS_START", "")}
+            assert_python_ok('-S', '-c', textwrap.dedent(main_script),
+                             **env_vars)
+        finally:
+            unlink(pickled_func_path)
+
+
+
     def test_py_methods(self):
         global PyMethodsTest
         class PyMethodsTest:
@@ -2366,26 +2644,28 @@ class AbstractPickleTests(unittest.TestCase):
                     self.assertIn(('c%s\n%s' % (mod, name)).encode(), pickled)
                     self.assertIs(type(self.loads(pickled)), type(val))
 
-    def test_local_lookup_error(self):
-        # Test that whichmodule() errors out cleanly when looking up
-        # an assumed globally-reachable object fails.
+    def test_nested_functions(self):
+        # Tests the pickling of functions defined in a local scope
         def f():
-            pass
-        # Since the function is local, lookup will fail
+            return 1
+
         for proto in range(0, pickle.HIGHEST_PROTOCOL + 1):
-            with self.assertRaises((AttributeError, pickle.PicklingError)):
-                pickletools.dis(self.dumps(f, proto))
+                depickled_func = pickle.loads(
+                    pickle.dumps(f), allow_dynamic_objects=True)
+                self.assertEqual(depickled_func(), 1)
         # Same without a __module__ attribute (exercises a different path
         # in _pickle.c).
         del f.__module__
         for proto in range(0, pickle.HIGHEST_PROTOCOL + 1):
-            with self.assertRaises((AttributeError, pickle.PicklingError)):
-                pickletools.dis(self.dumps(f, proto))
+                depickled_func = pickle.loads(
+                    pickle.dumps(f), allow_dynamic_objects=True)
+                self.assertEqual(depickled_func(), 1)
         # Yet a different path.
         f.__name__ = f.__qualname__
         for proto in range(0, pickle.HIGHEST_PROTOCOL + 1):
-            with self.assertRaises((AttributeError, pickle.PicklingError)):
-                pickletools.dis(self.dumps(f, proto))
+                depickled_func = pickle.loads(
+                    pickle.dumps(f), allow_dynamic_objects=True)
+                self.assertEqual(depickled_func(), 1)
 
 
 class BigmemPickleTests(unittest.TestCase):
