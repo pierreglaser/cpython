@@ -7833,6 +7833,7 @@ _pickle.load
   fix_imports: bool = True
   encoding: str = 'ASCII'
   errors: str = 'strict'
+  allow_dynamic_objects: bool = False
 
 Read and return an object from the pickle data stored in a file.
 
@@ -7861,8 +7862,9 @@ string instances as bytes objects.
 
 static PyObject *
 _pickle_load_impl(PyObject *module, PyObject *file, int fix_imports,
-                  const char *encoding, const char *errors)
-/*[clinic end generated code: output=69e298160285199e input=01b44dd3fc07afa7]*/
+                  const char *encoding, const char *errors,
+                  int allow_dynamic_objects)
+/*[clinic end generated code: output=8a9236ea46d0ae36 input=01a230a94ec309c5]*/
 {
     PyObject *result;
     UnpicklerObject *unpickler = _Unpickler_New();
@@ -7877,6 +7879,8 @@ _pickle_load_impl(PyObject *module, PyObject *file, int fix_imports,
         goto error;
 
     unpickler->fix_imports = fix_imports;
+
+    unpickler->allow_dynamic_objects = allow_dynamic_objects;
 
     result = load(unpickler);
     Py_DECREF(unpickler);
@@ -7896,6 +7900,7 @@ _pickle.loads
   fix_imports: bool = True
   encoding: str = 'ASCII'
   errors: str = 'strict'
+  allow_dynamic_objects: bool = False
 
 Read and return an object from the given pickle data.
 
@@ -7915,8 +7920,9 @@ string instances as bytes objects.
 
 static PyObject *
 _pickle_loads_impl(PyObject *module, PyObject *data, int fix_imports,
-                   const char *encoding, const char *errors)
-/*[clinic end generated code: output=1e7cb2343f2c440f input=70605948a719feb9]*/
+                   const char *encoding, const char *errors,
+                   int allow_dynamic_objects)
+/*[clinic end generated code: output=1a19635917915744 input=c1b72bc8a82f7869]*/
 {
     PyObject *result;
     UnpicklerObject *unpickler = _Unpickler_New();
@@ -7931,6 +7937,8 @@ _pickle_loads_impl(PyObject *module, PyObject *data, int fix_imports,
         goto error;
 
     unpickler->fix_imports = fix_imports;
+
+    unpickler->allow_dynamic_objects = allow_dynamic_objects;
 
     result = load(unpickler);
     Py_DECREF(unpickler);
