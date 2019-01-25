@@ -6807,16 +6807,32 @@ load_mark(UnpicklerObject *self)
 static int
 load_reduce(UnpicklerObject *self)
 {
-    PyObject *callable = NULL;
-    PyObject *argtup = NULL;
-    PyObject *obj = NULL;
+    PyObject *callable, *argtup, *obj;
+    PyObject *c_pickle_module, *py_pickle_module;
+    PyObject *c_make_skel_func, *py_make_skel_func;
+    PickleState *st = _Pickle_GetGlobalState();
+
+    c_pickle_module = PyImport_ImportModule("_pickle");
+    py_pickle_module = PyImport_ImportModule("pickle");
+    c_make_skel_func = PyObject_GetAttrString(c_pickle_module,
+                                              "_make_skel_func");
+    py_make_skel_func = PyObject_GetAttrString(py_pickle_module,
+                                               "_make_skel_func");
 
     PDATA_POP(self->stack, argtup);
     if (argtup == NULL)
         return -1;
     PDATA_POP(self->stack, callable);
     if (callable) {
-        obj = PyObject_CallObject(callable, argtup);
+        if (!self->allow_dynamic_objects &&
+            (callable == c_make_skel_func ||
+             callable == py_make_skel_func)){
+            PyErr_SetString(st->UnpicklingError,
+                            "Attempting to load dynamic objects");
+        }
+        else{
+            obj = PyObject_CallObject(callable, argtup);
+        }
         Py_DECREF(callable);
     }
     Py_DECREF(argtup);
