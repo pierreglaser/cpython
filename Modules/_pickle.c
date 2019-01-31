@@ -3049,6 +3049,7 @@ save_cell(PicklerObject *self, PyObject *obj)
 
     save_reduce(self, save_reduce_tuple,  obj);
     Py_XDECREF(cell_contents);
+    Py_DECREF(save_reduce_tuple);
     return 0;
 }
 
