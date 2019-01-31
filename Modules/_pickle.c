@@ -4367,6 +4367,16 @@ save_function(PicklerObject *self, PyObject *obj)
         PyDict_SetItemString(state, "closure_values", processed_closure);
         PyDict_SetItemString(state, "dict", f_dict);
 
+         /* the name of a function f at its creation is included in it's code
+          * object (in f.__code__.co_name). But if f.__name__ is then
+          * explicitly modified, the modification is not applied in the code
+          * object. This typically happens when using functools.wraps.  For
+          * this reason, we have to not simply rely on f's code object, but
+          * extract manually f __name__ attribute and add it it it's state.
+          * This discussion also holds for the __doc__ attribute (in
+          * f.__code__.co_consts)
+          */
+
         PyDict_SetItemString(state, "name",
                              PyObject_GetAttrString(obj, "__name__"));
 
