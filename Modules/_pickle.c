@@ -3759,6 +3759,21 @@ save_singleton_type(PicklerObject *self, PyObject *obj, PyObject *singleton)
 }
 
 static int
+save_hidden_builtin(PicklerObject *self, PyObject *obj)
+{
+    PyObject *module_name = NULL;
+    if (_Pickler_Write(self, &global_op, 1) < 0)
+        goto error;
+    if (_Pickler_Write(self, "types\n", 1) < 0)
+        goto error;
+    if (obj == (PyObject *)&PyFunction_Type) {
+        if (_Pickler_Write(self,"FunctionType", len) < 0)
+    }
+int status = 0;
+return status;
+}
+
+static int
 save_type(PicklerObject *self, PyObject *obj)
 {
     if (obj == (PyObject *)&_PyNone_Type) {
@@ -3769,6 +3784,9 @@ save_type(PicklerObject *self, PyObject *obj)
     }
     else if (obj == (PyObject *)&_PyNotImplemented_Type) {
         return save_singleton_type(self, obj, Py_NotImplemented);
+    }
+    else if (obj == (PyObject *)&PyFunction_Type) {
+        return save_hidden_builtin(self, obj);
     }
     return save_global(self, obj, NULL);
 }

@@ -43,6 +43,19 @@ ClassMethodDescriptorType = type(dict.__dict__['fromkeys'])
 
 ModuleType = type(sys)
 
+
+def _cell_factory():
+    a = None
+
+    def h():
+        return a
+    return h.__closure__[0]
+
+
+cell = _cell_factory()
+CellType = type(cell)
+
+
 try:
     raise TypeError
 except TypeError:
