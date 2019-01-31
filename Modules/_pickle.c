@@ -4202,76 +4202,74 @@ _pickle__make_skel_func_impl(PyObject *module, PyObject *code,
     return (PyObject *)newfunc;
 }
 
-static PyObject *
-extract_func_data(PicklerObject *self, PyObject *obj)
+static int
+extract_func_data(PicklerObject *self, PyObject *obj, PyObject **co,
+                  PyObject **obj_globals, PyObject **defaults,
+                  PyObject **dict, PyObject **module,
+                  PyObject **closure, PyObject **base_globals)
 {
-    PyObject *co;
+    PyObject *globals_names = NULL, *globals = NULL;
+    PyObject *iterator = NULL, *item = NULL;
+    int status = 0;
 
     _Py_IDENTIFIER(__code__);
-    if (_PyObject_LookupAttrId((PyObject *)obj, &PyId___code__, &co) < 0) {
-        return NULL;
+    if (_PyObject_LookupAttrId((PyObject *)obj, &PyId___code__, co) < 0) {
+        PyErr_SetString(PyExc_AttributeError, "__code__");
+        goto error;
     }
 
+    *obj_globals = PyDict_New();
 
-    PyObject *global_names, *globals;
-    PyObject *f_globals = PyDict_New();
+    /* get the name of the variables viewed as global in python bytecode */
+    if (fill_globals(*co, &globals_names) < 0)
+        goto error;
 
-    fill_globals(co, &global_names);
+    /* get the global namespace of obj (all global variables, not necessarily
+     * use by obj), and extract each value corresponding to an item in
+     * globals_names*/
     globals = PyFunction_GetGlobals(obj);
-    PyObject *iterator = PyObject_GetIter(global_names);
-    PyObject *item;
-
+    iterator = PyObject_GetIter(globals_names);
+    if (iterator == NULL)
+        goto error;
     while ((item = PyIter_Next(iterator))) {
-        PyDict_SetItem(f_globals, item, PyDict_GetItem(globals, item));
+        PyDict_SetItem(*obj_globals, item, PyDict_GetItem(globals, item));
         Py_DECREF(item);
     }
 
     if (PyErr_Occurred()) {
-        return NULL;
+        return -1;
     }
 
-    /* process closure */
-    _Py_IDENTIFIER(__closure__);
-    PyObject *closure = NULL;
-    if (_PyObject_LookupAttrId((PyObject *)obj,
-                               &PyId___closure__, &closure) < 0) {
-        PyErr_SetString(PyExc_AttributeError, "__closure__");
-        return NULL;
-    }
+    /* if obj->func_closure is NULL, PyObject_GetAttrString return None instead
+     * */
+    *closure = PyObject_GetAttrString(obj, "__closure__");
 
-    PyObject *f_dict = NULL;
     _Py_IDENTIFIER(__dict__);
     if (_PyObject_LookupAttrId((PyObject *)obj,
-                               &PyId___dict__, &f_dict) < 0) {
+                               &PyId___dict__, dict) < 0) {
         PyErr_SetString(PyExc_AttributeError, "__dict__");
-        return NULL;
+        return -1;
     }
 
     _Py_IDENTIFIER(__module__);
-    PyObject *f_module = NULL;
-    if ((_PyObject_LookupAttrId((PyObject *)obj, &PyId___module__, &f_module) <0)){
+    if ((_PyObject_LookupAttrId((PyObject *)obj, &PyId___module__, module) <0)){
         PyErr_SetString(PyExc_AttributeError, "__module__");
         }
 
-    if ((f_module == Py_None) || (f_module == NULL)) {
-        f_module = PyDict_New();
+    if ((*module == Py_None) || (*module == NULL)) {
+        *module = PyDict_New();
     }
 
-    PyObject *f_defaults;
-    f_defaults = PyFunction_GetDefaults(obj);
-    if (f_defaults == NULL)
-        f_defaults = Py_None;
+    *defaults = PyFunction_GetDefaults(obj);
+    if (*defaults == NULL)
+        *defaults = Py_None;
         Py_INCREF(Py_None);
 
-    PyObject *state = PyTuple_New(6);
-    /* use PyTuple_Pack? */
-    PyTuple_SET_ITEM(state, 0, co);
-    PyTuple_SET_ITEM(state, 1, f_globals);
-    PyTuple_SET_ITEM(state, 2, f_defaults);
-    PyTuple_SET_ITEM(state, 3, closure);
-    PyTuple_SET_ITEM(state, 4, f_dict);
-    PyTuple_SET_ITEM(state, 5, f_module);
-    return state;
+    if (0) {
+  error:
+        status = -1;
+    }
+    return status;
 }
 
 static int
