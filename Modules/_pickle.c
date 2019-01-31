@@ -4276,19 +4276,48 @@ static int
 save_function(PicklerObject *self, PyObject *obj)
 {
     PyObject *module = NULL, *modules = NULL, *main_module = NULL;
-    PyObject *module_name = NULL;
-    PyObject *global_name = NULL;
-    PyObject *dotted_path = NULL;
+    PyObject *module_name = NULL, *global_name = NULL, *dotted_path = NULL;
+    PyObject *cls = NULL, *parent = NULL;
+    PyObject *pickle_module = NULL, *_fill_function_obj = NULL;
+    PyObject *make_skel_func_obj = NULL;
+
+    PyObject *co = NULL, *obj_globals = NULL, *defaults = NULL;
+    PyObject *dict = NULL, *obj_module = NULL, *closure = NULL;
+    PyObject *base_globals = NULL, *state = NULL, *make_skel_func_args = NULL;
+
+    const char mark_op = MARK;
+    const char reduce_op = REDUCE;
+    const char tuple_op = TUPLE;
+
     int status = 0;
     int defined_in_main = 1;
 
     _Py_IDENTIFIER(__name__);
     _Py_IDENTIFIER(__qualname__);
-
+    _Py_IDENTIFIER(__main__);
     _Py_IDENTIFIER(modules);
 
+    /* the beginning of this function is a series of checks to figure out of
+     * obj is a dynamic function. It is very similar to what happens in the
+     * beginning of save_global (trying to retrieve obj via an attribute lookup
+     * on it's module, and checking for identity between obj and its retrieved
+     * version. The main difference is that prior to this, a direct attribute
+     * lookup is done on the __main__ to prevent whichmodule to produce
+     * errouneous results coming from other keys in sys.modules mapping to the
+     * __main__ module (like "__mp_main__").  */
+
+    /* borrowed reference */
     modules = _PySys_GetObjectId(&PyId_modules);
+    if (modules == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "unable to get sys.modules");
+        goto error;
+    }
+    /* borrowed reference */
     main_module = PyDict_GetItemString(modules, "__main__");
+    if (main_module == NULL) {
+        PyErr_SetString(PyExc_KeyError, "cannot access __main__ module");
+        goto error;
+    }
 
     if (_PyObject_LookupAttrId(obj, &PyId___qualname__, &global_name) < 0)
         goto error;
@@ -4306,10 +4335,6 @@ save_function(PicklerObject *self, PyObject *obj)
      * modules, to avoid being fooled by potential references to __main__ in
      * sys.modules (for example, __mp_main__) */
 
-    PyObject *lastname = NULL, *cls = NULL, *parent = NULL;
-
-    lastname = PyList_GET_ITEM(dotted_path, PyList_GET_SIZE(dotted_path)-1);
-    Py_INCREF(lastname);
 
     cls = get_deep_attribute(main_module, dotted_path, &parent);
 
@@ -4321,6 +4346,13 @@ save_function(PicklerObject *self, PyObject *obj)
 
         module = PyImport_Import(module_name);
 
+        /* if module cannot be imported, set module_name to "__main__" */
+        if (module == NULL) {
+            PyErr_Clear();
+            Py_DECREF(module_name);
+            module_name = _PyUnicode_FromId(&PyId___main__);
+        }
+
         cls = get_deep_attribute(module, dotted_path, &parent);
         defined_in_main = _PyUnicode_EqualToASCIIString(module_name,
                                                         "__main__");
@@ -4329,80 +4361,73 @@ save_function(PicklerObject *self, PyObject *obj)
     Py_CLEAR(dotted_path);
 
     if (defined_in_main || ((cls == NULL) || (cls != obj))) {
-        PyObject *pickle_module = PyImport_ImportModule("_pickle");
-        PyObject *_fill_function_obj, *make_skel_func_obj;
-        const char mark_op = MARK;
-        const char reduce_op = REDUCE;
-        const char tuple_op = TUPLE;
+        pickle_module = PyImport_ImportModule("_pickle");
 
         make_skel_func_obj = PyObject_GetAttrString(pickle_module,
                 "_make_skel_func");
         _fill_function_obj = PyObject_GetAttrString(pickle_module,
                 "_fill_function");
 
-        PyObject *state_tuple = extract_func_data(self, obj);
-        PyObject *co, *f_globals, *f_defaults, *processed_closure, *f_dict;
-        PyObject *f_module;
 
-        co = PyTuple_GET_ITEM(state_tuple, 0);
-        Py_INCREF(co);
-        f_globals = PyTuple_GET_ITEM(state_tuple, 1);
-        Py_INCREF(f_globals);
-        f_defaults = PyTuple_GET_ITEM(state_tuple, 2);
-        Py_INCREF(f_defaults);
-        processed_closure = PyTuple_GET_ITEM(state_tuple, 3);
-        Py_INCREF(processed_closure);
-        f_dict = PyTuple_GET_ITEM(state_tuple, 4);
-        Py_INCREF(f_dict);
-        f_module = PyTuple_GET_ITEM(state_tuple, 5);
-        Py_INCREF(f_module);
+        if (extract_func_data(self, obj, &co, &obj_globals, &defaults, &dict,
+                              &obj_module, &closure, &base_globals)){
+            goto error;
+        }
+        /* The name of a function f at its creation is included in it's code
+         * object (in f.__code__.co_name). But if f.__name__ is then
+         * explicitly modified, the modification is not applied in the code
+         * object. This typically happens when using functools.wraps.  For
+         * this reason, we have to not simply rely on f's code object, but
+         * extract manually f __name__ attribute and add it it it's state.
+         * This discussion also holds for the __doc__ attribute (in
+         * f.__code__.co_consts)
+         * As for __annotations__, __qualname__, __module__, they do not exist
+         * anywhere else, so they have to be extracted explicitly.
+         */
 
+        state = Py_BuildValue("{s:O,s:O,s:O,s:O,s:O,s:O,s:O,s:O,s:O}",
+                              "globals", obj_globals, "defaults", defaults,
+                              "closure_values", closure, "dict", dict,
+                              "name", PyObject_GetAttrString(obj, "__name__"),
+                              "doc", PyObject_GetAttrString(obj, "__doc__"),
+                              "module", PyObject_GetAttrString(obj, "__module__"),
+                              "annotations", PyObject_GetAttrString(obj, "__annotations__"),
+                              "qualname", PyObject_GetAttrString(obj, "__qualname__"));
 
-        PyObject *state = PyDict_New();
+        /* obj can reference itself in many places, including in its dict,
+         * its globals, as well as it's closure. For this reason, we:
+         * - create a first version on the function, containing only its code,
+         *   its name and external global variables
+         * - memoize the function (any attempt to save obj again will trigger
+         *   the insertion of a BINGET opcode inside the pickle string, instead
+         *   of trying to save obj again
+         * - Finally, rehydrate this skeleton with its attributes (the items in
+         *   state)
+         */
 
-        PyDict_SetItemString(state, "globals", f_globals);
-        PyDict_SetItemString(state, "defaults", f_defaults);
-        PyDict_SetItemString(state, "closure_values", processed_closure);
-        PyDict_SetItemString(state, "dict", f_dict);
+        /* start saving the instructions to reconstruct obj*/
+        if (save(self, _fill_function_obj, 0) < 0)
+            goto error;
 
-         /* the name of a function f at its creation is included in it's code
-          * object (in f.__code__.co_name). But if f.__name__ is then
-          * explicitly modified, the modification is not applied in the code
-          * object. This typically happens when using functools.wraps.  For
-          * this reason, we have to not simply rely on f's code object, but
-          * extract manually f __name__ attribute and add it it it's state.
-          * This discussion also holds for the __doc__ attribute (in
-          * f.__code__.co_consts)
-          */
+        /* call fill function on the following tuple */
+        if (_Pickler_Write(self, &mark_op, 1) < 0)
+            goto error;
 
-        PyDict_SetItemString(state, "name",
-                             PyObject_GetAttrString(obj, "__name__"));
+        /* the instructions contained in save_subimports contain, POP opcodes,
+         * so they leave the stack as it was before*/
+        if (save_subimports(self, co, PyDict_Values(obj_globals)) < -1)
+            goto error;
 
-        PyDict_SetItemString(state, "doc",
-                             PyObject_GetAttrString(obj, "__doc__"));
+        if (save(self, make_skel_func_obj, 0) < 0)
+            goto error;
 
-        PyDict_SetItemString(state, "module",
-                             PyObject_GetAttrString(obj, "__module__"));
+        make_skel_func_args = Py_BuildValue("(OO)", co, obj_module);
 
-        PyDict_SetItemString(state, "annotations",
-                             PyObject_GetAttrString(obj, "__annotations__"));
+        if (save_tuple(self, make_skel_func_args) < 0)
+            goto error;
 
-        PyDict_SetItemString(state, "qualname",
-                             PyObject_GetAttrString(obj, "__qualname__"));
-
-        save(self, _fill_function_obj, 0);
-        _Pickler_Write(self, &mark_op, 1);
-
-        save_subimports(self, co, PyDict_Values(f_globals));
-
-        save(self, make_skel_func_obj, 0);
-
-        PyObject *make_skel_func_args = PyTuple_New(2);
-        PyTuple_SetItem(make_skel_func_args, 0, co);
-        PyTuple_SetItem(make_skel_func_args, 1, f_module);
-
-        save_tuple(self, make_skel_func_args);
-        _Pickler_Write(self, &reduce_op, 1);
+        if (_Pickler_Write(self, &reduce_op, 1) < 0)
+            goto error;
 
         if (memo_put(self, obj) < 0)
             goto error;
@@ -4412,8 +4437,7 @@ save_function(PicklerObject *self, PyObject *obj)
         _Pickler_Write(self, &reduce_op, 1);
     }
     else {
-        save_global(self, obj, NULL);
-
+        return save_global(self, obj, NULL);
     }
 
     if (0) {
