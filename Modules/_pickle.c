@@ -3003,28 +3003,32 @@ batch_dict_exact(PicklerObject *self, PyObject *obj)
 static int
 save_code(PicklerObject *self, PyObject *obj)
 {
-    PyObject *save_reduce_tuple = NULL;
-    PyObject *state = NULL;
-
-    state = Py_BuildValue("(OOOOOOOOOOOOOOO)",
-                          PyObject_GetAttrString(obj, "co_argcount"),
-                          PyObject_GetAttrString(obj, "co_kwonlyargcount"),
-                          PyObject_GetAttrString(obj, "co_nlocals"),
-                          PyObject_GetAttrString(obj, "co_stacksize"),
-                          PyObject_GetAttrString(obj, "co_flags"),
-                          PyObject_GetAttrString(obj, "co_code"),
-                          PyObject_GetAttrString(obj, "co_consts"),
-                          PyObject_GetAttrString(obj, "co_names"),
-                          PyObject_GetAttrString(obj, "co_varnames"),
-                          PyObject_GetAttrString(obj, "co_filename"),
-                          PyObject_GetAttrString(obj, "co_name"),
-                          PyObject_GetAttrString(obj, "co_firstlineno"),
-                          PyObject_GetAttrString(obj, "co_lnotab"),
-                          PyObject_GetAttrString(obj, "co_freevars"),
-                          PyObject_GetAttrString(obj, "co_cellvars"));
+    PyObject *save_reduce_tuple = NULL, *attrs = NULL;
+    PyObject *state = NULL, *attr = NULL, *seq = NULL;
+    state = PyTuple_New(15);
+    int i;
+    attrs = Py_BuildValue("(sssssssssssssss)", "co_argcount",
+                          "co_kwonlyargcount", "co_nlocals",
+                          "co_stacksize", "co_flags",
+                          "co_code", "co_consts", "co_names", "co_varnames",
+                          "co_filename", "co_name", "co_firstlineno",
+                          "co_lnotab", "co_freevars",
+                          "co_cellvars");
+    seq = PySequence_Fast(attrs, "");
+    for (i = 0; i < PySequence_Fast_GET_SIZE(seq); i++) {
+        PyObject* attr_name = PySequence_Fast_GET_ITEM(seq, i);
+        attr = PyObject_GetAttr(obj, attr_name);
+        /* steals the new reference to attr, decrefing state suffices*/
+        PyTuple_SetItem(state, i , attr);
+    }
+    Py_DECREF(seq);
 
     save_reduce_tuple = Py_BuildValue("(OO)", (PyObject*)&PyCode_Type, state);
     save_reduce(self, save_reduce_tuple,  obj);
+
+    Py_DECREF(save_reduce_tuple);
+    Py_DECREF(state);
+    Py_DECREF(attrs);
     return 0;
 }
 
