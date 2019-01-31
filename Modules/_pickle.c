@@ -3078,12 +3078,15 @@ save_subimports(PicklerObject *self, PyObject *code,
 {
     PyObject *sys_modules_names, *modules, *dependencies_iter = NULL;
     PyObject *sys_modules_iter, *co_names, *package_name = NULL;
-    PyObject *tokens = NULL;
+    PyObject *tokens = NULL, *unique_co_names = NULL, *code_global = NULL;
+    PyObject *module_name = NULL, *module = NULL, *diff = NULL;
 
     const char pop_op = POP;
+    int status = 0;
 
     _Py_IDENTIFIER(modules);
     _Py_static_string(PyId_dot, ".");
+
     modules = _PySys_GetObjectId(&PyId_modules);
 
     /* A concurrent thread could mutate sys.modules. make sure we iterate over
@@ -3091,31 +3094,43 @@ save_subimports(PicklerObject *self, PyObject *code,
     sys_modules_names = PySequence_List(modules);
 
     dependencies_iter = PyObject_GetIter(top_level_dependencies);
+    if (dependencies_iter == NULL)
+        goto error;
+
     sys_modules_iter = PyObject_GetIter(sys_modules_names);
+    if (sys_modules_iter == NULL)
+        goto error;
 
-    co_names = PySet_New(PyObject_GetAttrString(code, "co_names"));
+    co_names = PyObject_GetAttrString(code, "co_names");
+    unique_co_names = PySet_New(co_names);
+    if (unique_co_names == NULL)
+        goto error;
 
+
+    /* loop over each global used by code */
     for (;;) {
-        PyObject *item;
-        item = PyIter_Next(dependencies_iter);
-
-        if (item == NULL) {
+        code_global = PyIter_Next(dependencies_iter);
+        if (code_global == NULL) {
             if (PyErr_Occurred()) {
                 Py_DECREF(dependencies_iter);
-                return -1;
+                goto error;
             }
             break;
         }
 
-        /* check if any known dependency is an imported package */
-        if (PyModule_Check(item) &&
-            PyObject_HasAttrString(item, "__package__")){
-            if (!(PyObject_GetAttrString(item, "__package__") == Py_None)){
-                package_name = PyObject_GetAttrString(item, "__name__");
+        /* check if this global is an imported package */
+        if (PyModule_Check(code_global) &&
+            PyObject_HasAttrString(code_global, "__package__")){
+            if (!(PyObject_GetAttrString(code_global, "__package__") == Py_None)){
+                package_name = PyObject_GetAttrString(code_global, "__name__");
+
+                /* Now, look for currently imported submodules of code_global
+                 * in sys.modules. Each of them has to be explicitly saved in
+                 * the pickle string of the code`s function, as it will not
+                 * be present in its state['globals'] */
                 for (;;) {
-                    PyObject *module;
-                    module = PyIter_Next(sys_modules_iter);
-                    if (module == NULL) {
+                    module_name = PyIter_Next(sys_modules_iter);
+                    if (module_name == NULL) {
                         if (PyErr_Occurred()) {
                             Py_DECREF(sys_modules_iter);
                             return -1;
@@ -3123,37 +3138,63 @@ save_subimports(PicklerObject *self, PyObject *code,
                         break;
                     }
                     /* represents the splitted dotted path of module */
-                    tokens = PyUnicode_Split(module,
+                    tokens = PyUnicode_Split(module_name,
                                              _PyUnicode_FromId(&PyId_dot),
                                              -1);
 
-                    /* check if this module is a submodule with item as a
-                     * parent package */
+                    /* - The first part of this if statement checks if module
+                     *   is included in code_global
+                     * - The second part checks the inclusion is strict
+                     */
                     if (!PyUnicode_Compare(PyList_GetItem(tokens, 0),
                                            package_name) &&
                         PyList_Size(tokens) > 1){
+
+                        /* tokens[0] is the package name, tokens[:1] is the
+                         * attribute chain leading to the module */
                         tokens = PyList_GetSlice(tokens,
                                                  1, PyList_GET_SIZE(tokens));
-
                         tokens = PySet_New(tokens);
 
-                        PyObject *diff = NULL;
+                        /* We approximate the usage of module in code by
+                         * checking if each item in the splitted module path
+                         * list (for example: [xml, etree, ElementTree]) is
+                         * also an item of code.co_names. This condition (of
+                         * the need of a submodule by a code object) is
+                         * sufficient, but not necessary: for example if
+                         * - xml.etree is imported globally
+                         * - xml is used in f
+                         * - etree is the name of a local variable (whose
+                         *   value can be set *   to anything)
+                         *   xml.etree will be saved whereas not
+                         * needed.
+                         */
+
+                        /* XXX this is probably not a great way to compute a
+                         * difference between two sets. */
+
                         diff = tokens->ob_type->tp_as_number->nb_subtract(
-                            tokens, co_names);
+                                tokens, unique_co_names);
 
                         if (PySet_Size(diff) == 0){
-
-                            save_module(self, PyDict_GetItem(modules,
-                                                             module));
-                            _Pickler_Write(self, &pop_op, 1);
-
+                            /* borrowed reference */
+                            module = PyDict_GetItem(modules, module_name);
+                            if (save(self, module, 0) < 0)
+                                goto error;
+                            if (_Pickler_Write(self, &pop_op, 1) < 0)
+                                goto error;
                         }
                     }
                 }
             }
         }
     }
-    return 0;
+    if (0) {
+  error:
+        status = -1;
+    }
+
+    return status;
 }
 
 static int
