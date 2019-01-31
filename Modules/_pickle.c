@@ -3056,15 +3056,20 @@ save_cell(PicklerObject *self, PyObject *obj)
 static int
 save_module(PicklerObject *self, PyObject *obj)
 {
-    PyObject *builtins, *import_function, *save_reduce_tuple, *obj_name;
+    PyObject *builtins = NULL, *import_function = NULL;
+    PyObject *save_reduce_tuple = NULL, *obj_name= NULL;
 
-    /* TODO: use _PyEval_GetBuiltinId */
     builtins = PyEval_GetBuiltins();
+
+    /* borrowed reference */
     import_function = PyDict_GetItemString(builtins, "__import__");
     obj_name = PyObject_GetAttrString(obj, "__name__");
 
     save_reduce_tuple = Py_BuildValue("(O(O))", import_function, obj_name);
     save_reduce(self, save_reduce_tuple,  obj);
+
+    Py_DECREF(save_reduce_tuple);
+    Py_DECREF(obj_name);
     return 0;
 }
 
