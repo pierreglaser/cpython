@@ -614,7 +614,8 @@ typedef struct PicklerObject {
                                    is an unbound method, NULL otherwise */
     PyObject *dispatch_table;   /* private dispatch_table, can be NULL */
     PyObject *global_hook;      /* hook for invoking user-defined callbacks
-                                   instead of save_global */
+                                   instead of save_global when pickling
+                                   functions and classes*/
 
     PyObject *write;            /* write() method of the output stream. */
     PyObject *output_buffer;    /* Write into a local bytearray buffer before
