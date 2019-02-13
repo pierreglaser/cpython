@@ -4030,7 +4030,7 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
      *  */
     if (self->global_hook != NULL){
         PyObject *reduce_value = NULL;
-        reduce_value = PyObject_CallFunctionObjArgs(self->global_hook, obj,
+        reduce_value = PyObject_CallFunctionObjArgs(self->global_hook, self, obj,
                                                     NULL);
         if (reduce_value == NULL){
             goto error;
