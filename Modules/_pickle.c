@@ -613,7 +613,7 @@ typedef struct PicklerObject {
     PyObject *pers_func_self;   /* borrowed reference to self if pers_func
                                    is an unbound method, NULL otherwise */
     PyObject *dispatch_table;   /* private dispatch_table, can be NULL */
-    PyObject *reducer_override;      /* hook for invoking user-defined callbacks
+    PyObject *_reducer_override;/* hook for invoking user-defined callbacks
                                    instead of save_global when pickling
                                    functions and classes*/
 
@@ -1110,7 +1110,7 @@ _Pickler_New(void)
     self->fast_memo = NULL;
     self->max_output_len = WRITE_BUF_SIZE;
     self->output_len = 0;
-    self->reducer_override = NULL;
+    self->_reducer_override = NULL;
 
     self->memo = PyMemoTable_New();
     self->output_buffer = PyBytes_FromStringAndSize(NULL,
@@ -4060,9 +4060,9 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
      *  conditions are not exclusive anymore. If reducer_override returns
      *  NotImplementedError, then we must fallback to save_type or save_global
      *  */
-    if (self->reducer_override != NULL){
+    if (self->_reducer_override != NULL) {
         PyObject *reduce_value = NULL;
-        reduce_value = PyObject_CallFunctionObjArgs(self->reducer_override,
+        reduce_value = PyObject_CallFunctionObjArgs(self->_reducer_override,
                                                     obj, NULL);
         if (reduce_value == NULL){
             goto error;
@@ -4200,7 +4200,19 @@ static int
 dump(PicklerObject *self, PyObject *obj)
 {
     const char stop_op = STOP;
+    PyObject *tmp;
+    _Py_IDENTIFIER(reducer_override);
 
+    if (_PyObject_LookupAttrId((PyObject *)self, &PyId_reducer_override,
+                               &tmp) < 0) {
+        return -1;
+    }
+    /*  The private _reducer_override attribute of the pickler acts as a cache
+     *  of a potential reducer_override method. This cache is updated at each
+     *  Pickler.dump call*/
+    if (tmp != NULL) {
+        Py_XSETREF(self->_reducer_override, tmp);
+    }
     if (self->proto >= 2) {
         char header[2];
 
@@ -4720,7 +4732,6 @@ static PyMemberDef Pickler_members[] = {
     {"bin", T_INT, offsetof(PicklerObject, bin)},
     {"fast", T_INT, offsetof(PicklerObject, fast)},
     {"dispatch_table", T_OBJECT_EX, offsetof(PicklerObject, dispatch_table)},
-    {"reducer_override", T_OBJECT_EX, offsetof(PicklerObject, reducer_override)},
     {NULL}
 };
 
