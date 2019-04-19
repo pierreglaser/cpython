@@ -4075,6 +4075,7 @@ save(PicklerObject *self, PyObject *obj, int pers_save)
                 goto error;
             goto done;
         }
+        Py_DECREF(reduce_value);
     }
 
     if (type == &PyType_Type) {
