@@ -3944,40 +3944,25 @@ save_reduce(PicklerObject *self, PyObject *args, PyObject *obj)
                 return -1;
         }
         else {
-            PyObject *statetup = NULL;
 
-            /* If a state_setter is specified, and state is a dict, we could be
-             * tempted to save a (state_setter, state) as state, but this would
-             * collide with load_build's (state, slotstate) special handling.
-             * Therefore, create a new format for state saving: (state_setter,
-             * state, slotstate)
-             */
-            if PyDict_Check(state)
-                statetup = Py_BuildValue("(OOO)", state_setter, state,
-                                         Py_None);
-            else if PyTuple_Check(state) {
-                if (PyTuple_GET_SIZE(state) == 2) {
-                    statetup = Py_BuildValue("(OOO)", state_setter,
-                                             PyTuple_GetItem(state, 0),
-                                             PyTuple_GetItem(state, 1));
-                }
-            }
+            /* If a state_setter is specified, call it instead of load_build to
+             * update obj's with its previous state.
+             * The first 4 save/write instructions push state_setter and its
+             * tuple of expected arguments (obj, state) onto the stack. The
+             * REDUCE opcode triggers the state_setter(obj, state) function
+             * call. Finally, because state-updating routines only do in-place
+             * modification, the whole operation has to be stack-transparent.
+             * Thus, we finally pop the call's output from the stack.*/
 
-            if (statetup == NULL) {
-                PyErr_SetString(st->PicklingError,
-                                "state must be either a dict or a tuple of"
-                                " length 2");
+            const char tupletwo_op = TUPLE2;
+            const char pop_op = POP;
+            if (save(self, state_setter, 0) < 0 ||
+                save(self, obj, 0) < 0 || save(self, state, 0) < 0 ||
+                _Pickler_Write(self, &tupletwo_op, 1) < 0 ||
+                _Pickler_Write(self, &reduce_op, 1) < 0 ||
+                _Pickler_Write(self, &pop_op, 1) < 0)
                 return -1;
-            }
-
-            if (save(self, statetup, 0) < 0 ||
-                _Pickler_Write(self, &build_op, 1) < 0) {
-                Py_DECREF(statetup);
-                return -1;
-            }
-            Py_DECREF(statetup);
         }
-
     }
     return 0;
 }
@@ -6275,27 +6260,6 @@ load_build(UnpicklerObject *self)
         Py_INCREF(state);
         Py_INCREF(slotstate);
         Py_DECREF(tmp);
-    }
-    /* state can embed a callable state setter */
-    else if (PyTuple_Check(state) && PyTuple_GET_SIZE(state) == 3) {
-        PyObject *state_slotstate;
-
-        setstate = PyTuple_GET_ITEM(state, 0);
-        state_slotstate = PyTuple_GetSlice(state, 1, 3);
-
-        Py_INCREF(setstate);
-
-        /* call the setstate function */
-        if (PyObject_CallFunctionObjArgs(setstate, inst, state_slotstate,
-                                         NULL) == NULL){
-            Py_DECREF(state_slotstate);
-            Py_DECREF(setstate);
-            return -1;
-        }
-
-        Py_DECREF(state_slotstate);
-        Py_DECREF(setstate);
-        return 0;
     }
     else
         slotstate = NULL;
