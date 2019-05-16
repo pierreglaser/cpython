@@ -3822,6 +3822,33 @@ class _TestSharedMemory(BaseTestCase):
 
         smm.shutdown()
 
+    def test_shared_memory_SharedMemoryManager_shutdown_if_parent_dies(self):
+        cmd = '''if 1:
+            import os, sys, time
+            import multiprocessing as mp
+            from multiprocessing import Process
+
+            from multiprocessing.managers import SharedMemoryManager
+
+            smm = SharedMemoryManager()
+            smm.start()
+            sl = smm.ShareableList([1, 2, 3])
+
+            sys.stdout.write(f'{sl.shm.name}\\n')
+            sys.stdout.flush()
+            time.sleep(100)
+        '''
+
+        p = subprocess.Popen([sys.executable, '-E', '-c', cmd],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        shm_name = p.stdout.readline().decode().strip()
+        p.terminate()
+        time.sleep(1)
+
+        with self.assertRaises(FileNotFoundError):
+            sl = shared_memory.SharedMemory(shm_name, create=False)
+            sl.unlink()
+
     @unittest.skipIf(os.name != "posix", "resource_tracker is posix only")
     def test_shared_memory_SharedMemoryManager_reuses_resource_tracker(self):
         # bpo-36867: test that a SharedMemoryManager uses the
